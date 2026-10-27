@@ -7,6 +7,7 @@ import dataclasses
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 
 def _build_data(a):
@@ -15,32 +16,45 @@ def _build_data(a):
 
     trunc = D.TruncCfg(a.head_chars, a.tail_chars)
     excl_ids, excl_hash = D.heldout_ids(a.exclude) if a.exclude else (None, None)
+    import pyarrow.parquet as pq
+
+    # every (source, subset) part is cached so an interrupted build resumes
+    cache = Path(a.output).with_suffix("").parent / f".parts-{Path(a.output).stem}"
+    cache.mkdir(parents=True, exist_ok=True)
+
+    def cached(name: str, fn):
+        part = cache / f"{name.replace('/', '__')}.parquet"
+        if part.exists():
+            return pq.read_table(part)
+        t = fn()
+        D.write(t, part)
+        return t
+
+    common: dict[str, Any] = dict(
+        seed=a.seed, per_group=a.per_group, exclude_ids=excl_ids, trunc=trunc
+    )
     tables = []
     dynawords = list(D.DYNAWORDS) if a.dynaword == ["all"] else a.dynaword
     for repo in dynawords:
-        tables.append(
-            D.build_dynaword(
-                repo,
-                a.n_per_subset,
-                seed=a.seed,
-                per_group=a.per_group,
-                exclude_ids=excl_ids,
-                trunc=trunc,
+        for sub in D.dynaword_subsets(repo):
+            tables.append(
+                cached(
+                    f"{repo}/{sub}",
+                    lambda repo=repo, sub=sub: D.build_dynaword(
+                        repo, a.n_per_subset, subsets=[sub], **common
+                    ),
+                )
             )
-        )
     for spec in a.propella:
         corpus, lang = spec.split(":")
         langs = D.PROPELLA_CORPORA[corpus][2] if lang == "all" else [lang]
         for lg in langs:
             tables.append(
-                D.build_propella_annotations(
-                    corpus,
-                    lg,
-                    a.n_per_lang,
-                    seed=a.seed,
-                    per_group=a.per_group,
-                    exclude_ids=excl_ids,
-                    trunc=trunc,
+                cached(
+                    f"{corpus}/{lg}",
+                    lambda corpus=corpus, lg=lg: D.build_propella_annotations(
+                        corpus, lg, a.n_per_lang, **common
+                    ),
                 )
             )
     t = D.concat_dedup(tables, exclude_hashes=excl_hash)
