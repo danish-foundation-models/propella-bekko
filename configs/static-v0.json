@@ -1,0 +1,14 @@
+{
+  "data": "data/train-small.parquet",
+  "heldout": "data/heldout-small.parquet",
+  "backbone": "static:hotchpotch/bekko-static-embedding-v1",
+  "output_dir": "runs/static-v0",
+  "max_length": 8192,
+  "tail_tokens": 512,
+  "max_tokens_per_batch": 262144,
+  "epochs": 3,
+  "lr": 0.01,
+  "head_lr": 0.001,
+  "eval_every": 500,
+  "head_hidden": 1024
+}

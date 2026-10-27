@@ -1,0 +1,59 @@
+[project]
+name = "propella-bekko"
+version = "0.1.0"
+description = "Fast document annotation models (propella-1 label space) for pretraining-data curation"
+readme = "README.md"
+authors = [
+    { name = "Kenneth", email = "kennethenevoldsen@gmail.com" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "huggingface-hub>=2.3.0",
+    "pyarrow>=26.0.0",
+    "safetensors>=0.8.0",
+    "scikit-learn>=1.9.1",
+    "torch>=2.8",
+    "tqdm>=4.70.1",
+    "transformers>=5.21.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.3",
+    "ty>=0.0.92",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu129", marker = "sys_platform == 'linux'" }]
+
+[project.scripts]
+propella-bekko = "propella_bekko.cli:main"
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501", "E741", "RUF001", "RUF002", "RUF003"]
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.rules]
+# torch idiom: nn.Module.forward is declared as an attribute
+invalid-mutable-override = "ignore"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

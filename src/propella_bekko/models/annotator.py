@@ -1,0 +1,151 @@
+"""Multi-head model that predicts all propella-1 properties in one forward pass."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import torch
+import torch.nn.functional as F
+from safetensors.torch import load_file, save_file
+from torch import nn
+from transformers import AutoTokenizer
+
+from propella_bekko.models.backbones import Backbone, backbone_from_spec
+from propella_bekko.schema import Field, fields_from_config, fields_to_config
+
+
+def length_features(
+    n_chars: torch.Tensor, n_words: torch.Tensor, truncated: torch.Tensor
+) -> torch.Tensor:
+    """Cheap document-level features the encoder cannot see after truncation."""
+    return torch.stack(
+        [
+            torch.log1p(n_chars.float()) / 10.0,
+            torch.log1p(n_words.float()) / 10.0,
+            truncated.float(),
+        ],
+        dim=-1,
+    )
+
+
+N_LENGTH_FEATURES = 3
+
+
+class PropellaBekko(nn.Module):
+    def __init__(
+        self,
+        backbone: Backbone,
+        fields: list[Field],
+        dropout: float = 0.1,
+        use_length_features: bool = True,
+        head_hidden: int | None = None,
+    ):
+        super().__init__()
+        self.backbone: Backbone = backbone
+        self.fields = fields
+        self.use_length_features = use_length_features
+        d = backbone.hidden_size
+        h = head_hidden or d
+        self.head_hidden = h
+        extra = N_LENGTH_FEATURES if use_length_features else 0
+        self.proj = nn.Sequential(
+            nn.Dropout(dropout), nn.Linear(d + extra, h), nn.GELU(), nn.LayerNorm(h)
+        )
+        self.heads = nn.ModuleDict({f.name: nn.Linear(h, f.num_labels) for f in fields})
+
+    def forward(self, input_ids, attention_mask, n_chars=None, n_words=None, truncated=None, **_):
+        pooled = self.backbone(input_ids, attention_mask)
+        if self.use_length_features:
+            assert n_chars is not None and n_words is not None and truncated is not None
+            pooled = torch.cat(
+                [pooled, length_features(n_chars, n_words, truncated).to(pooled.dtype)],
+                -1,
+            )
+        z = self.proj(pooled)
+        return {name: head(z) for name, head in self.heads.items()}
+
+    # ------------------------------------------------------------------ #
+    def loss(
+        self,
+        logits: dict[str, torch.Tensor],
+        targets: dict[str, torch.Tensor],
+        weights: dict[str, float] | None = None,
+    ):
+        total, parts = 0.0, {}
+        for f in self.fields:
+            lg, y = logits[f.name].float(), targets[f.name]
+            if f.kind == "single":
+                if (y != -100).sum() == 0:
+                    continue
+                l = F.cross_entropy(lg, y, ignore_index=-100)
+            else:
+                valid = y[:, 0] != -100
+                if valid.sum() == 0:
+                    continue
+                l = F.binary_cross_entropy_with_logits(lg[valid], y[valid].float())
+            w = (weights or {}).get(f.name, 1.0)
+            total = total + w * l
+            parts[f.name] = l.detach()
+        return total, parts
+
+    @torch.no_grad()
+    def decode(self, logits: dict[str, torch.Tensor], threshold: float = 0.5) -> list[dict]:
+        """Logits -> propella-style annotation dicts (string labels)."""
+        bs = next(iter(logits.values())).shape[0]
+        rows: list[dict] = [{} for _ in range(bs)]
+        for f in self.fields:
+            lg = logits[f.name].float()
+            if f.kind == "single":
+                idx = lg.argmax(-1).tolist()
+                for r, i in zip(rows, idx, strict=False):
+                    r[f.name] = f.labels[i]
+            else:
+                p = torch.sigmoid(lg)
+                top = p.argmax(-1)
+                hot = p >= threshold
+                hot[torch.arange(bs), top] = True  # propella always emits >=1 value
+                for r, h in zip(rows, hot.tolist(), strict=False):
+                    r[f.name] = [lab for lab, on in zip(f.labels, h, strict=False) if on]
+        return rows
+
+    # ------------------------------------------------------------------ #
+    def save(self, path: str | Path, tokenizer, extra_config: dict | None = None):
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        tokenizer.save_pretrained(path / "tokenizer")
+        sd = {k: v.contiguous() for k, v in self.state_dict().items()}
+        # tied embeddings would be duplicated; safetensors refuses shared storage
+        save_file({k: v.clone() for k, v in sd.items()}, str(path / "model.safetensors"))
+        cfg = {
+            "fields": fields_to_config(self.fields),
+            "use_length_features": self.use_length_features,
+            "head_hidden": self.head_hidden,
+            "backbone_spec": self.backbone.spec(),
+            **(extra_config or {}),
+        }
+        (path / "config.json").write_text(json.dumps(cfg, indent=2))
+
+    @classmethod
+    def load(cls, path: str | Path, device: str = "cpu", attn_implementation: str = "sdpa"):
+        path = Path(path)
+        cfg = json.loads((path / "config.json").read_text())
+        backbone = backbone_from_spec(cfg["backbone_spec"], attn_implementation)
+        model = cls(
+            backbone,
+            fields_from_config(cfg["fields"]),
+            use_length_features=cfg["use_length_features"],
+            head_hidden=cfg.get("head_hidden"),
+        )
+        missing, unexpected = model.load_state_dict(
+            load_file(str(path / "model.safetensors")), strict=False
+        )
+        missing = [m for m in missing if "rotary" not in m]
+        if missing or unexpected:
+            raise RuntimeError(f"checkpoint mismatch: missing={missing} unexpected={unexpected}")
+        tok = AutoTokenizer.from_pretrained(path / "tokenizer")
+        return model.to(device).eval(), tok, cfg
+
+
+def count_parameters(model: nn.Module) -> int:
+    return sum(p.numel() for p in model.parameters())
