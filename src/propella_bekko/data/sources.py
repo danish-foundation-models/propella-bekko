@@ -103,9 +103,7 @@ def sample_row_groups(
     fs = HfFileSystem()
     rng = random.Random(seed)
     handles = {f: pq.ParquetFile(fs.open(f)) for f in files}
-    groups = [
-        (f, i) for f, h in handles.items() for i in range(h.metadata.num_row_groups)
-    ]
+    groups = [(f, i) for f, h in handles.items() for i in range(h.metadata.num_row_groups)]
     rng.shuffle(groups)
     # few large row groups (small files) -> allow more docs per group
     per_group = max(per_group, -(-n_docs // max(1, len(groups))))
@@ -169,9 +167,7 @@ def _finalize(
 def dynaword_subsets(repo: str) -> list[str]:
     files = HfApi().list_repo_files(repo, repo_type="dataset")
     subsets = {
-        f.split("/")[1]
-        for f in files
-        if f.startswith("data/") and f.endswith("/metadata.parquet")
+        f.split("/")[1] for f in files if f.startswith("data/") and f.endswith("/metadata.parquet")
     }
     return sorted(s for s in subsets if f"data/{s}/data.parquet" in files)
 
@@ -179,9 +175,7 @@ def dynaword_subsets(repo: str) -> list[str]:
 def dynaword_domains(repo: str) -> dict[str, str]:
     """Parse `subset -> domain` from the main table of a Dynaword README."""
     readme = Path(hf_hub_download(repo, "README.md", repo_type="dataset")).read_text()
-    m = re.search(
-        r"<!-- START-MAIN TABLE -->(.*?)<!-- END-MAIN TABLE -->", readme, re.DOTALL
-    )
+    m = re.search(r"<!-- START-MAIN TABLE -->(.*?)<!-- END-MAIN TABLE -->", readme, re.DOTALL)
     if not m:
         return {}
     out = {}
@@ -230,15 +224,11 @@ def build_dynaword(
 def annotation_files(corpus: str, lang: str) -> list[str]:
     fs = HfFileSystem()
     return sorted(
-        fs.glob(
-            f"datasets/{ANNOTATION_REPO}/data/propella-1-4b/{corpus}/{lang}/*.parquet"
-        )
+        fs.glob(f"datasets/{ANNOTATION_REPO}/data/propella-1-4b/{corpus}/{lang}/*.parquet")
     )
 
 
-def fetch_annotations(
-    files: list[str], wanted: pa.Array, threads: int = 16
-) -> pa.Table:
+def fetch_annotations(files: list[str], wanted: pa.Array, threads: int = 16) -> pa.Table:
     """Find annotation rows for `wanted` ids without downloading whole shards.
 
     Phase 1 scans only the `id` column of every row group (in parallel);
@@ -253,14 +243,8 @@ def fetch_annotations(
 
     def scan(job):
         f, i = job
-        ids = (
-            pq.ParquetFile(HfFileSystem().open(f))
-            .read_row_group(i, columns=["id"])
-            .column("id")
-        )
-        return (
-            (f, i) if pc.any(pc.is_in(ids.cast(pa.string()), wanted)).as_py() else None
-        )
+        ids = pq.ParquetFile(HfFileSystem().open(f)).read_row_group(i, columns=["id"]).column("id")
+        return (f, i) if pc.any(pc.is_in(ids.cast(pa.string()), wanted)).as_py() else None
 
     def read(job):
         f, i = job
@@ -268,9 +252,7 @@ def fetch_annotations(
         return t.filter(pc.is_in(t.column("id").cast(pa.string()), wanted))
 
     with ThreadPoolExecutor(threads) as ex:
-        jobs = [
-            (f, i) for f, n in zip(files, ex.map(n_groups, files)) for i in range(n)
-        ]
+        jobs = [(f, i) for f, n in zip(files, ex.map(n_groups, files)) for i in range(n)]
         hits = [j for j in ex.map(scan, jobs) if j is not None]
         log.info(
             "annotation scan: %d/%d row groups contain sampled ids",
@@ -306,9 +288,7 @@ def build_propella_annotations(
     meta = fetch_annotations(annotation_files(corpus, lang), texts.column("id"))
     t = _finalize(texts, meta, source, lang, lang, domain, trunc)
     if t.num_rows > n_docs:
-        t = t.take(
-            pa.array(sorted(random.Random(seed).sample(range(t.num_rows), n_docs)))
-        )
+        t = t.take(pa.array(sorted(random.Random(seed).sample(range(t.num_rows), n_docs))))
     log.info(
         "%s/%s: %d rows (%d/%d texts annotated)",
         source, lang, t.num_rows, meta.num_rows, texts.num_rows,
@@ -332,9 +312,7 @@ def heldout_ids(path: str | Path) -> tuple[dict[tuple[str, str], set[str]], set[
     return by, set(t.column("text_sha1").to_pylist())
 
 
-def concat_dedup(
-    tables: list[pa.Table], exclude_hashes: set[str] | None = None
-) -> pa.Table:
+def concat_dedup(tables: list[pa.Table], exclude_hashes: set[str] | None = None) -> pa.Table:
     t = pa.concat_tables(tables, promote_options="default")
     seen = set(exclude_hashes or ())
     keep = []
