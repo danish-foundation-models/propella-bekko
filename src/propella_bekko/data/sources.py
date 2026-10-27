@@ -27,13 +27,17 @@ import random
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pyarrow as pa
-import pyarrow.compute as pc
+import pyarrow.compute as _pc
 import pyarrow.parquet as pq
 from huggingface_hub import HfApi, HfFileSystem, hf_hub_download
 
 from propella_bekko.schema import FIELD_NAMES
+
+# pyarrow.compute functions are generated at runtime and invisible to type checkers
+pc: Any = _pc
 
 log = logging.getLogger(__name__)
 
