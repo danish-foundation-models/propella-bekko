@@ -252,7 +252,9 @@ def fetch_annotations(files: list[str], wanted: pa.Array, threads: int = 16) -> 
         return t.filter(pc.is_in(t.column("id").cast(pa.string()), wanted))
 
     with ThreadPoolExecutor(threads) as ex:
-        jobs = [(f, i) for f, n in zip(files, ex.map(n_groups, files)) for i in range(n)]
+        jobs = [
+            (f, i) for f, n in zip(files, ex.map(n_groups, files), strict=False) for i in range(n)
+        ]
         hits = [j for j in ex.map(scan, jobs) if j is not None]
         log.info(
             "annotation scan: %d/%d row groups contain sampled ids",
@@ -307,6 +309,7 @@ def heldout_ids(path: str | Path) -> tuple[dict[tuple[str, str], set[str]], set[
         t.column("source").to_pylist(),
         t.column("subset").to_pylist(),
         t.column("id").to_pylist(),
+        strict=False,
     ):
         by.setdefault((s, sub), set()).add(i)
     return by, set(t.column("text_sha1").to_pylist())
