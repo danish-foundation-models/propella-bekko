@@ -212,8 +212,11 @@ def build_dynaword(
             per_group=per_group,
             exclude_ids=(exclude_ids or {}).get((source, s)),
         )
-        # metadata can be >1 GB (25M rows); only fetch rows for the sampled ids
-        meta = fetch_annotations([f"datasets/{repo}/data/{s}/metadata.parquet"], texts.column("id"))
+        # metadata can be >1 GB (25M rows): download, but only materialise sampled ids
+        meta = pq.read_table(
+            hf_hub_download(repo, f"data/{s}/metadata.parquet", repo_type="dataset"),
+            filters=pc.is_in(pc.field("id"), texts.column("id")),
+        )
         domain = domains.get(s, "Other")
         t = _finalize(texts, meta, source, s, lang, domain, trunc)
         log.info("%s/%s (%s): %d rows", source, s, domain, t.num_rows)
@@ -231,7 +234,7 @@ def annotation_files(corpus: str, lang: str) -> list[str]:
     )
 
 
-def fetch_annotations(files: list[str], wanted: pa.Array, threads: int = 16) -> pa.Table:
+def fetch_annotations(files: list[str], wanted: pa.Array, threads: int = 48) -> pa.Table:
     """Find annotation rows for `wanted` ids without downloading whole shards.
 
     Phase 1 scans only the `id` column of every row group (in parallel);
@@ -241,17 +244,25 @@ def fetch_annotations(files: list[str], wanted: pa.Array, threads: int = 16) -> 
 
     wanted = wanted.cast(pa.string())
 
+    fs = HfFileSystem()
+    footers: dict[str, Any] = {}
+
+    def _open(f):
+        # reuse the parsed footer (can be several MB) and avoid large read-ahead blocks
+        return pq.ParquetFile(fs.open(f, block_size=1 << 20), metadata=footers.get(f))
+
     def n_groups(f):
-        return pq.ParquetFile(HfFileSystem().open(f)).metadata.num_row_groups
+        footers[f] = pq.ParquetFile(fs.open(f)).metadata
+        return footers[f].num_row_groups
 
     def scan(job):
         f, i = job
-        ids = pq.ParquetFile(HfFileSystem().open(f)).read_row_group(i, columns=["id"]).column("id")
+        ids = _open(f).read_row_group(i, columns=["id"]).column("id")
         return (f, i) if pc.any(pc.is_in(ids.cast(pa.string()), wanted)).as_py() else None
 
     def read(job):
         f, i = job
-        t = pq.ParquetFile(HfFileSystem().open(f)).read_row_group(i)
+        t = _open(f).read_row_group(i)
         return t.filter(pc.is_in(t.column("id").cast(pa.string()), wanted))
 
     with ThreadPoolExecutor(threads) as ex:
