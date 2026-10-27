@@ -205,9 +205,6 @@ def build_dynaword(
     domains = dynaword_domains(repo)
     tables = []
     for s in subsets or dynaword_subsets(repo):
-        meta = pq.read_table(
-            hf_hub_download(repo, f"data/{s}/metadata.parquet", repo_type="dataset")
-        )
         texts = sample_row_groups(
             [f"datasets/{repo}/data/{s}/data.parquet"],
             n_per_subset,
@@ -215,6 +212,8 @@ def build_dynaword(
             per_group=per_group,
             exclude_ids=(exclude_ids or {}).get((source, s)),
         )
+        # metadata can be >1 GB (25M rows); only fetch rows for the sampled ids
+        meta = fetch_annotations([f"datasets/{repo}/data/{s}/metadata.parquet"], texts.column("id"))
         domain = domains.get(s, "Other")
         t = _finalize(texts, meta, source, s, lang, domain, trunc)
         log.info("%s/%s (%s): %d rows", source, s, domain, t.num_rows)
@@ -266,6 +265,8 @@ def fetch_annotations(files: list[str], wanted: pa.Array, threads: int = 16) -> 
             len(jobs),
         )
         tables = list(ex.map(read, hits))
+    if not tables:
+        return pa.table({"id": pa.array([], pa.string())})
     return pa.concat_tables(tables, promote_options="default")
 
 
