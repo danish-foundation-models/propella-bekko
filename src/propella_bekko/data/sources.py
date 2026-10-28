@@ -289,7 +289,11 @@ def build_propella_annotations(
     per_group: int = 32,
     exclude_ids: dict[tuple[str, str], set[str]] | None = None,
     trunc: TruncCfg | None = None,
+    labels: pa.Table | None = None,
 ) -> pa.Table:
+    """`labels`: reuse annotations from an earlier build (same seed/params -> same
+    sampled docs), skipping the expensive annotation scan; used to re-extract
+    texts with a different truncation."""
     repo, domain, _ = PROPELLA_CORPORA[corpus]
     source = f"propella-annotations/{corpus}"
     files = sorted(HfFileSystem().glob(f"datasets/{repo}/data/{lang}/train/*.parquet"))
@@ -303,7 +307,10 @@ def build_propella_annotations(
         per_group=per_group,
         exclude_ids=(exclude_ids or {}).get((source, lang)),
     )
-    meta = fetch_annotations(annotation_files(corpus, lang), texts.column("id"))
+    if labels is not None:
+        meta = labels
+    else:
+        meta = fetch_annotations(annotation_files(corpus, lang), texts.column("id"))
     t = _finalize(texts, meta, source, lang, lang, domain, trunc)
     if t.num_rows > n_docs:
         t = t.take(pa.array(sorted(random.Random(seed).sample(range(t.num_rows), n_docs))))

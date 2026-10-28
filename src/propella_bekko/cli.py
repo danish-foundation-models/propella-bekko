@@ -33,6 +33,10 @@ def _build_data(a):
     common: dict[str, Any] = dict(
         seed=a.seed, per_group=a.per_group, exclude_ids=excl_ids, trunc=trunc
     )
+    labels_from = pq.read_table(a.labels_from) if a.labels_from else None
+    import pyarrow.compute as _pc
+
+    pc: Any = _pc
     tables = []
     dynawords = list(D.DYNAWORDS) if a.dynaword == ["all"] else a.dynaword
     for repo in dynawords:
@@ -49,11 +53,20 @@ def _build_data(a):
         corpus, lang = spec.split(":")
         langs = D.PROPELLA_CORPORA[corpus][2] if lang == "all" else [lang]
         for lg in langs:
+            src = f"propella-annotations/{corpus}"
+            lab = None
+            if labels_from is not None:
+                lab = labels_from.filter(
+                    pc.and_(
+                        pc.equal(labels_from.column("source"), src),
+                        pc.equal(labels_from.column("subset"), lg),
+                    )
+                )
             tables.append(
                 cached(
                     f"{corpus}/{lg}",
-                    lambda corpus=corpus, lg=lg: D.build_propella_annotations(
-                        corpus, lg, a.n_per_lang, **common
+                    lambda corpus=corpus, lg=lg, lab=lab: D.build_propella_annotations(
+                        corpus, lg, a.n_per_lang, labels=lab, **common
                     ),
                 )
             )
@@ -264,6 +277,11 @@ def main(argv=None):
         help="max docs taken from one parquet row group",
     )
     b.add_argument("--exclude", help="held-out parquet whose ids/texts are excluded")
+    b.add_argument(
+        "--labels-from",
+        help="earlier build with the same sampling params: reuse its propella-annotations "
+        "labels (skips the annotation scan), e.g. to re-extract longer texts",
+    )
     b.add_argument("--head-chars", type=int, default=12_000)
     b.add_argument("--tail-chars", type=int, default=3_000)
     b.add_argument("--seed", type=int, default=0)

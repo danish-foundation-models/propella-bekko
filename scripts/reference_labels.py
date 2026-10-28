@@ -81,8 +81,15 @@ async def annotate(rows, propella, a):
     ) as client:
 
         async def one(i, r):
-            msgs = propella.create_annotator_messages(r["text"], max_content_chars=a.max_content_chars)
-            body = {"model": a.model, "messages": msgs, "temperature": 0.0, "max_tokens": a.max_tokens}
+            msgs = propella.create_annotator_messages(
+                r["text"], max_content_chars=a.max_content_chars
+            )
+            body = {
+                "model": a.model,
+                "messages": msgs,
+                "temperature": 0.0,
+                "max_tokens": a.max_tokens,
+            }
             if not a.no_schema:
                 body["response_format"] = {
                     "type": "json_schema",
@@ -97,11 +104,19 @@ async def annotate(rows, propella, a):
                         ann = parse_json(d["choices"][0]["message"]["content"] or "")
                         for k in usage:
                             usage[k] += d.get("usage", {}).get(k, 0)
-                        out[i] = {"source": r["source"], "id": r["id"], "_ok": ann is not None, **(ann or {})}
+                        out[i] = {
+                            "source": r["source"],
+                            "id": r["id"],
+                            "_ok": ann is not None,
+                            **(ann or {}),
+                        }
                         return
                     except (httpx.HTTPError, KeyError) as e:
                         if attempt == 3:
-                            print(f"failed {r['id']}: {type(e).__name__}: {str(e)[:200]}", file=sys.stderr)
+                            print(
+                                f"failed {r['id']}: {type(e).__name__}: {str(e)[:200]}",
+                                file=sys.stderr,
+                            )
                             out[i] = {"source": r["source"], "id": r["id"], "_ok": False}
                         await asyncio.sleep(2**attempt)
 

@@ -1,9 +1,10 @@
 import json
 import sys
+from pathlib import Path
 
 for run in sys.argv[1:]:
     try:
-        r = json.load(open(f"runs/{run}/results.json"))
+        r = json.loads(Path(f"runs/{run}/results.json").read_text())
     except FileNotFoundError:
         print(run, "not finished")
         continue
