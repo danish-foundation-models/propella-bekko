@@ -12,6 +12,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import numpy as np
 import pyarrow.parquet as pq
 import torch
 
@@ -113,27 +114,39 @@ def train(cfg: TrainConfig) -> dict:
 
     enc = Encoder(tok, cfg.max_length, cfg.tail_tokens)
     t0 = time.time()
-    seqs, trunc = [], []
+    # tokenised sequences are kept as one flat int32 array (lists of ints cost ~30x more memory)
+    chunks, lens, trunc = [], [], []
     for i in range(0, len(train_rows), 4096):
         s, tr = enc.ids([r["text"] for r in train_rows[i : i + 4096]])
-        seqs += s
-        trunc += tr
+        flat = np.fromiter((t for seq in s for t in seq), dtype=np.int32)
+        chunks.append(flat)
+        lens.extend(len(seq) for seq in s)
+        trunc.extend(tr)
+    tokens = np.concatenate(chunks)
+    lens = np.asarray(lens, dtype=np.int32)
+    offsets = np.concatenate([[0], np.cumsum(lens)])
+    del chunks
+    trunc = np.asarray(trunc, dtype=bool)
     log.info(
-        "tokenised %d docs in %.0fs (mean len %.0f)",
-        len(seqs),
+        "tokenised %d docs in %.0fs (mean len %.0f, %.1f tokens total)",
+        len(lens),
         time.time() - t0,
-        sum(map(len, seqs)) / len(seqs),
+        lens.mean(),
+        tokens.size,
     )
+
+    def seq(i):
+        return tokens[offsets[i] : offsets[i + 1]]
 
     def epoch_batches(ep: int):
         rng = random.Random(cfg.seed + ep)
         # shuffle in mega-chunks, then length-bucket inside each chunk
-        idx = list(range(len(seqs)))
+        idx = list(range(len(lens)))
         rng.shuffle(idx)
         batches = []
         for c in range(0, len(idx), 50_000):
             chunk = idx[c : c + 50_000]
-            for b in token_budget_batches([len(seqs[i]) for i in chunk], cfg.max_tokens_per_batch):
+            for b in token_budget_batches([int(lens[i]) for i in chunk], cfg.max_tokens_per_batch):
                 batches.append([chunk[j] for j in b])
         rng.shuffle(batches)
         return batches
@@ -175,7 +188,7 @@ def train(cfg: TrainConfig) -> dict:
         batches = epoch_batches(ep)
         for bi, b in enumerate(batches):
             rows = [train_rows[i] for i in b]
-            batch = enc.collate(rows, [seqs[i] for i in b], [trunc[i] for i in b], fields)
+            batch = enc.collate(rows, [seq(i) for i in b], trunc[b].tolist(), fields)
             targets = {k: v.to(device) for k, v in batch.pop("targets").items()}
             batch = {k: v.to(device) for k, v in batch.items()}
             with torch.autocast("cuda", dtype=dtype, enabled=cfg.dtype != "fp32"):

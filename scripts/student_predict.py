@@ -14,7 +14,9 @@ ann = Annotator(model, tok, cfg["max_length"], cfg["tail_tokens"], device="cuda"
 rows = pq.read_table(inp).to_pylist()
 preds = ann.annotate(rows)
 pq.write_table(
-    pa.Table.from_pylist([{"source": r["source"], "id": r["id"], **p} for r, p in zip(rows, preds, strict=True)]),
+    pa.Table.from_pylist(
+        [{"source": r["source"], "id": r["id"], **p} for r, p in zip(rows, preds, strict=True)]
+    ),
     out,
 )
 print("wrote", out, len(rows))

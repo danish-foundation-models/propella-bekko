@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import torch
 
 from propella_bekko.data.sources import TRUNC_MARK
@@ -43,14 +44,14 @@ class Encoder:
             trunc.append(cut or TRUNC_MARK in t)
         return out, trunc
 
-    def pad_batch(self, seqs: list[list[int]]) -> tuple[torch.Tensor, torch.Tensor]:
-        L = max(len(s) for s in seqs)
-        ids = torch.full((len(seqs), L), self.pad, dtype=torch.long)
-        mask = torch.zeros((len(seqs), L), dtype=torch.long)
+    def pad_batch(self, seqs: list[Any]) -> tuple[torch.Tensor, torch.Tensor]:
+        lens = np.fromiter((len(s) for s in seqs), dtype=np.int32, count=len(seqs))
+        L = int(lens.max()) if len(lens) else 0
+        ids = np.full((len(seqs), L), self.pad, dtype=np.int32)
         for i, s in enumerate(seqs):
-            ids[i, : len(s)] = torch.tensor(s)
-            mask[i, : len(s)] = 1
-        return ids, mask
+            ids[i, : lens[i]] = s if not isinstance(s, list) else np.asarray(s, dtype=np.int32)
+        mask = (np.arange(L)[None, :] < lens[:, None]).astype(np.int32)
+        return torch.from_numpy(ids.astype(np.int64)), torch.from_numpy(mask)
 
     def batch(self, rows: list[dict], fields: list[Field] | None = None) -> dict[str, Any]:
         texts = [r["text"] for r in rows]
