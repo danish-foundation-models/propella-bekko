@@ -34,14 +34,16 @@ def field_metrics(preds: list[dict], golds: list[dict], fields: list[Field]) -> 
             }
             if f.ordinal:
                 rank = {lab: i for i, lab in enumerate(f.labels)}
-                d = np.array([abs(rank[a] - rank[b]) for a, b in pairs])
+                d = np.array(
+                    [abs(rank[a] - rank[b]) if a in rank else len(rank) - 1 for a, b in pairs]
+                )
                 m["mae"] = float(d.mean())
                 m["within_1"] = float((d <= 1).mean())
                 m["qwk"] = (
                     float(
                         cohen_kappa_score(
                             [rank[x] for x in yg],
-                            [rank[x] for x in yp],
+                            [rank.get(x, len(rank) - 1) for x in yp],
                             weights="quadratic",
                         )
                     )
