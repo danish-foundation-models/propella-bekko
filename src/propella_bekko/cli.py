@@ -88,11 +88,15 @@ def _train(a):
     print(json.dumps(r["val"]["summary"], indent=2))
 
 
-def _load_rows(path, split, limit):
+def _load_rows(path, split, limit, sample=None):
     import pyarrow.parquet as pq
 
     filt = [("split", "=", split)] if split else None
     rows = pq.read_table(path, filters=filt).to_pylist()
+    if sample and sample < len(rows):
+        import random
+
+        rows = random.Random(0).sample(rows, sample)  # same subset as scripts/propella_baseline.py
     return rows[:limit] if limit else rows
 
 
@@ -102,7 +106,7 @@ def _evaluate(a):
     from propella_bekko.models import PropellaBekko
 
     model, tok, cfg = PropellaBekko.load(a.model)
-    rows = _load_rows(a.data, a.split, a.limit)
+    rows = _load_rows(a.data, a.split, a.limit, a.sample)
     ann = Annotator(model, tok, cfg["max_length"], cfg["tail_tokens"], device=a.device)
     preds = ann.annotate(rows)
     res = {
@@ -125,6 +129,34 @@ def _evaluate(a):
     if a.output:
         Path(a.output).write_text(out)
     print(json.dumps({k: v for k, v in res.items() if k != "fields"}, indent=2))
+
+
+def _score(a):
+    """Score an annotation parquet (e.g. a propella-1 baseline) against held-out labels."""
+    import pyarrow.parquet as pq
+
+    from propella_bekko.metrics import field_metrics, summarize
+    from propella_bekko.models import PropellaBekko
+
+    gold = {(r["source"], r["id"]): r for r in pq.read_table(a.gold).to_pylist()}
+    preds = [r for r in pq.read_table(a.pred).to_pylist() if (r["source"], r["id"]) in gold]
+    golds = [gold[(r["source"], r["id"])] for r in preds]
+    _, _, cfg = PropellaBekko.load(a.fields_from) if a.fields_from else (None, None, None)
+    from propella_bekko.schema import fields_from_config
+    from propella_bekko.train import build_fields
+
+    fields = fields_from_config(cfg["fields"]) if cfg else build_fields(golds, 64)
+    # unparseable generations count as wrong, not as missing
+    for p in preds:
+        for f in fields:
+            p.setdefault(f.name, None)
+            if p[f.name] is None:
+                p[f.name] = "<invalid>" if f.kind == "single" else []
+    res = field_metrics(preds, golds, fields)
+    out = {"n": len(preds), "summary": summarize(res), "fields": res}
+    if a.output:
+        Path(a.output).write_text(json.dumps(out, indent=2))
+    print(json.dumps({"n": out["n"], "summary": out["summary"]}, indent=2))
 
 
 def _annotate(a):
@@ -173,7 +205,7 @@ def _benchmark(a):
     from propella_bekko.models import PropellaBekko, count_parameters
 
     model, tok, cfg = PropellaBekko.load(a.model)
-    rows = _load_rows(a.data, a.split, a.limit)
+    rows = _load_rows(a.data, a.split, a.limit, a.sample)
     dtype = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}[a.dtype]
     ann = Annotator(
         model,
@@ -249,6 +281,7 @@ def main(argv=None):
         e.add_argument("--data", required=True)
         e.add_argument("--split", default=None, help="optional value of a `split` column")
         e.add_argument("--limit", type=int)
+        e.add_argument("--sample", type=int, help="seeded random subset (matches baselines)")
         e.add_argument("--device", default="cuda")
         if name == "evaluate":
             e.add_argument("--output")
@@ -257,6 +290,13 @@ def main(argv=None):
             e.add_argument("--max-tokens", type=int, default=65_536)
             e.add_argument("--compile", action="store_true")
         e.set_defaults(fn=fn)
+
+    sc = sub.add_parser("score", help="score an annotation parquet against held-out labels")
+    sc.add_argument("--pred", required=True)
+    sc.add_argument("--gold", required=True)
+    sc.add_argument("--fields-from", help="model dir whose label space (country vocab) to use")
+    sc.add_argument("--output")
+    sc.set_defaults(fn=_score)
 
     n = sub.add_parser("annotate", help="annotate a parquet file with id/text columns")
     n.add_argument("--model", required=True)

@@ -48,6 +48,9 @@ def main():
     p.add_argument("--input", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--limit", type=int)
+    p.add_argument(
+        "--sample", type=int, help="random (seeded) subset size; same subset for every model"
+    )
     p.add_argument("--max-model-len", type=int, default=32768)
     p.add_argument("--max-content-chars", type=int, default=50_000)
     p.add_argument("--gpu-memory-utilization", type=float, default=0.85)
@@ -59,6 +62,10 @@ def main():
 
     propella = load_propella(a.model)
     rows = pq.read_table(a.input, columns=["source", "id", "text"]).to_pylist()
+    if a.sample and a.sample < len(rows):
+        import random
+
+        rows = random.Random(0).sample(rows, a.sample)
     if a.limit:
         rows = rows[: a.limit]
 
