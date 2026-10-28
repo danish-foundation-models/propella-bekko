@@ -53,30 +53,51 @@ class StaticBackbone(Backbone):
 
     kind = "static"
 
-    def __init__(self, num_embeddings: int, dim: int, pad_id: int):
+    def __init__(self, num_embeddings: int, dim: int, pad_id: int, pool: str = "mean"):
         super().__init__()
-        self.emb = nn.EmbeddingBag(num_embeddings, dim, mode="mean", padding_idx=pad_id)
         self.hidden_size = dim
         self.pad_id = pad_id
+        self.pool = pool
+        if pool == "mean":
+            self.emb = nn.EmbeddingBag(num_embeddings, dim, mode="mean", padding_idx=pad_id)
+        elif pool == "attn":
+            # learned token weighting on top of the static vectors (no attention between tokens)
+            self.emb = nn.Embedding(num_embeddings, dim, padding_idx=pad_id)
+            self.score = nn.Linear(dim, 1)
+        else:
+            raise ValueError(f"unknown pool: {pool}")
 
     def forward(self, input_ids, attention_mask):
         ids = input_ids.masked_fill(attention_mask == 0, self.pad_id)
-        return self.emb(ids)
+        if self.pool == "mean":
+            return self.emb(ids)
+        h = self.emb(ids)
+        s = self.score(h).squeeze(-1).masked_fill(attention_mask == 0, float("-inf"))
+        a = s.softmax(-1).unsqueeze(-1)
+        return (a * h).sum(1)
 
     def spec(self) -> dict:
         n, d = self.emb.weight.shape
-        return {"kind": self.kind, "num_embeddings": n, "dim": d, "pad_id": self.pad_id}
+        return {
+            "kind": self.kind,
+            "num_embeddings": n,
+            "dim": d,
+            "pad_id": self.pad_id,
+            "pool": self.pool,
+        }
 
 
 def backbone_from_spec(spec: dict, attn_implementation: str = "sdpa") -> Backbone:
     if spec["kind"] == "static":
-        return StaticBackbone(spec["num_embeddings"], spec["dim"], spec["pad_id"])
+        return StaticBackbone(
+            spec["num_embeddings"], spec["dim"], spec["pad_id"], spec.get("pool", "mean")
+        )
     cfg = dict(spec["config"])
     config = AutoConfig.for_model(cfg.pop("model_type"), **cfg)
     return HFBackbone(AutoModel.from_config(config, attn_implementation=attn_implementation))
 
 
-def _load_static(repo: str, dim: int | None = None):
+def _load_static(repo: str, dim: int | None = None, pool: str = "mean"):
     from huggingface_hub import hf_hub_download
     from transformers import PreTrainedTokenizerFast
 
@@ -91,13 +112,21 @@ def _load_static(repo: str, dim: int | None = None):
     w = load_file(hf_hub_download(repo, "model.safetensors"))["embedding.weight"].float()
     if dim:  # Matryoshka truncation
         w = w[:, :dim].contiguous()
-    bb = StaticBackbone(w.shape[0], w.shape[1], tok.pad_token_id)
+    bb = StaticBackbone(w.shape[0], w.shape[1], tok.pad_token_id, pool=pool)
     with torch.no_grad():
         bb.emb.weight.copy_(w)
+        if pool == "attn":
+            nn.init.zeros_(bb.score.weight)
+            nn.init.zeros_(bb.score.bias)
     return bb, tok
 
 
-def load_backbone(name: str, attn_implementation: str = "sdpa", static_dim: int | None = None):
+def load_backbone(
+    name: str,
+    attn_implementation: str = "sdpa",
+    static_dim: int | None = None,
+    static_pool: str = "mean",
+):
     """Load a backbone + tokenizer.
 
     * `static:<repo>` - static embedding table (sentence-transformers StaticEmbedding
@@ -107,7 +136,7 @@ def load_backbone(name: str, attn_implementation: str = "sdpa", static_dim: int 
     * anything else - `AutoModel.from_pretrained(name)` (e.g. hotchpotch/bekko-embedding-v1-a8m).
     """
     if name.startswith(STATIC_PREFIX):
-        return _load_static(name[len(STATIC_PREFIX) :], static_dim)
+        return _load_static(name[len(STATIC_PREFIX) :], static_dim, static_pool)
     if name.startswith(BEKKO_PREFIX):
         from huggingface_hub import hf_hub_download, snapshot_download
 

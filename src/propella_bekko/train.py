@@ -50,6 +50,7 @@ class TrainConfig:
     seed: int = 0
     gradient_checkpointing: bool = False
     static_dim: int | None = None
+    static_pool: str = "mean"  # mean | attn (learned token weighting for static backbones)
     pos_weight: bool = False  # inverse-frequency positive weights for multi-select BCE
     label_smoothing: float = 0.0
     ordinal_smoothing: float = 0.0  # spread ordinal targets onto neighbouring levels
