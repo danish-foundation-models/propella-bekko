@@ -17,7 +17,7 @@ Issue: https://github.com/danish-foundation-models/propella-bekko/issues/6
 | mean single-select accuracy | 0.789 (majority baseline 0.620) |
 | mean multi-select Jaccard | 0.726 |
 | mean macro-F1 | 0.515 |
-| throughput (fp16, incl. tokenisation) | 1,040 docs/s (all 9,720); 684 docs/s on the 1,000-doc baseline sample |
+| throughput (fp16, incl. tokenisation) | 1,040 docs/s (all 9,720 docs, GPU otherwise idle) |
 
 Per property (accuracy / majority / macro-F1; ordinal: within-1, QWK):
 
