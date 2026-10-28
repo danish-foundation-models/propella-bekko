@@ -20,7 +20,7 @@ from propella_bekko.encoding import Encoder
 from propella_bekko.inference import Annotator, token_budget_batches
 from propella_bekko.metrics import field_metrics, summarize
 from propella_bekko.models import PropellaBekko, count_parameters, load_backbone
-from propella_bekko.schema import PROPELLA_FIELDS, build_country_field
+from propella_bekko.schema import PROPELLA_FIELDS, build_country_field, encode_labels
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +49,9 @@ class TrainConfig:
     dtype: str = "fp16"  # fp16 | bf16 | fp32
     seed: int = 0
     gradient_checkpointing: bool = False
-    static_dim: int | None = None  # Matryoshka truncation for static backbones
+    static_dim: int | None = None
+    pos_weight: bool = False  # inverse-frequency positive weights for multi-select BCE
+    label_smoothing: float = 0.0  # Matryoshka truncation for static backbones
     head_hidden: int | None = None
     freeze_backbone: bool = False
     extra: dict = field(default_factory=dict)
@@ -177,6 +179,20 @@ def train(cfg: TrainConfig) -> dict:
         for g, b in zip(opt.param_groups, base_lrs, strict=False):
             g["lr"] = b * s
 
+    pw = None
+    if cfg.pos_weight:
+        counts = {f.name: torch.zeros(f.num_labels) for f in fields if f.kind == "multi"}
+        for r in train_rows:
+            for name, hot in encode_labels(r, fields).items():
+                if name in counts:
+                    counts[name] += torch.tensor(hot).clamp(min=0)
+        n = len(train_rows)
+        pw = {
+            name: ((n - c).clamp(min=1) / c.clamp(min=1)).clamp(1.0, 20.0).to(device)
+            for name, c in counts.items()
+        }
+        log.info("pos_weight: %s", {k: [round(x, 2) for x in v.tolist()] for k, v in pw.items()})
+
     dtype = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}[cfg.dtype]
     scaler = torch.amp.GradScaler(enabled=cfg.dtype == "fp16")
     (out / "train_config.json").write_text(json.dumps(asdict(cfg), indent=2))
@@ -193,7 +209,9 @@ def train(cfg: TrainConfig) -> dict:
             batch = {k: v.to(device) for k, v in batch.items()}
             with torch.autocast("cuda", dtype=dtype, enabled=cfg.dtype != "fp32"):
                 logits = model(**batch)
-            loss, _ = model.loss(logits, targets)
+            loss, _ = model.loss(
+                logits, targets, pos_weight=pw, label_smoothing=cfg.label_smoothing
+            )
             scaler.scale(loss / cfg.grad_accum).backward()
             if (bi + 1) % cfg.grad_accum:
                 continue

@@ -71,6 +71,8 @@ class PropellaBekko(nn.Module):
         logits: dict[str, torch.Tensor],
         targets: dict[str, torch.Tensor],
         weights: dict[str, float] | None = None,
+        pos_weight: dict[str, torch.Tensor] | None = None,
+        label_smoothing: float = 0.0,
     ):
         total, parts = 0.0, {}
         for f in self.fields:
@@ -78,19 +80,25 @@ class PropellaBekko(nn.Module):
             if f.kind == "single":
                 if (y != -100).sum() == 0:
                     continue
-                l = F.cross_entropy(lg, y, ignore_index=-100)
+                l = F.cross_entropy(lg, y, ignore_index=-100, label_smoothing=label_smoothing)
             else:
                 valid = y[:, 0] != -100
                 if valid.sum() == 0:
                     continue
-                l = F.binary_cross_entropy_with_logits(lg[valid], y[valid].float())
+                l = F.binary_cross_entropy_with_logits(
+                    lg[valid],
+                    y[valid].float(),
+                    pos_weight=None if pos_weight is None else pos_weight[f.name],
+                )
             w = (weights or {}).get(f.name, 1.0)
             total = total + w * l
             parts[f.name] = l.detach()
         return total, parts
 
     @torch.no_grad()
-    def decode(self, logits: dict[str, torch.Tensor], threshold: float = 0.5) -> list[dict]:
+    def decode(
+        self, logits: dict[str, torch.Tensor], threshold: float | dict[str, float] = 0.5
+    ) -> list[dict]:
         """Logits -> propella-style annotation dicts (string labels)."""
         bs = next(iter(logits.values())).shape[0]
         rows: list[dict] = [{} for _ in range(bs)]
@@ -103,7 +111,8 @@ class PropellaBekko(nn.Module):
             else:
                 p = torch.sigmoid(lg)
                 top = p.argmax(-1)
-                hot = p >= threshold
+                thr = threshold.get(f.name, 0.5) if isinstance(threshold, dict) else threshold
+                hot = p >= thr
                 hot[torch.arange(bs), top] = True  # propella always emits >=1 value
                 for r, h in zip(rows, hot.tolist(), strict=False):
                     r[f.name] = [lab for lab, on in zip(f.labels, h, strict=False) if on]

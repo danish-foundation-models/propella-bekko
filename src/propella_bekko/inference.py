@@ -40,7 +40,7 @@ class Annotator:
         device: str = "cuda",
         dtype: torch.dtype = torch.float16,
         max_tokens: int = 65_536,
-        threshold: float = 0.5,
+        threshold: float | dict[str, float] = 0.5,
         compile: bool = False,
     ):
         self.model = model.to(device).eval()
@@ -50,6 +50,7 @@ class Annotator:
             self.model = torch.compile(self.model, dynamic=True)
         self.enc = Encoder(tokenizer, max_length=max_length, tail_tokens=tail_tokens)
         self.device, self.max_tokens, self.threshold = device, max_tokens, threshold
+        self.fields = model.fields
         self._decode = model.decode
 
     @torch.inference_mode()
@@ -65,6 +66,24 @@ class Annotator:
             for i, ann in zip(idx, self._decode(logits, threshold=self.threshold), strict=False):
                 out[i] = ann
         return [o for o in out if o is not None]
+
+    @torch.inference_mode()
+    def probabilities(self, rows: list[dict]) -> dict[str, list[list[float]]]:
+        """Sigmoid probabilities for multi-select fields, class probs for single-select."""
+        seqs, trunc = self.enc.ids([r["text"] for r in rows])
+        out: dict[str, list] = {}
+        for idx in token_budget_batches([len(s) for s in seqs], self.max_tokens):
+            b = self.enc.collate(
+                [rows[i] for i in idx], [seqs[i] for i in idx], [trunc[i] for i in idx]
+            )
+            b = {k: v.to(self.device, non_blocking=True) for k, v in b.items()}
+            logits = self.model(**b)
+            for f in self.fields:
+                lg = logits[f.name].float()
+                p = torch.sigmoid(lg) if f.kind == "multi" else lg.softmax(-1)
+                for j, row in zip(idx, p.tolist(), strict=False):
+                    out.setdefault(f.name, [None] * len(rows))[j] = row  # type: ignore[index]
+        return out  # type: ignore[return-value]
 
     def benchmark(self, rows: list[dict], warmup: int = 64) -> dict:
         self.annotate(rows[:warmup])

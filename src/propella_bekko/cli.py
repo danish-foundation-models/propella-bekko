@@ -120,7 +120,10 @@ def _evaluate(a):
 
     model, tok, cfg = PropellaBekko.load(a.model)
     rows = _load_rows(a.data, a.split, a.limit, a.sample)
-    ann = Annotator(model, tok, cfg["max_length"], cfg["tail_tokens"], device=a.device)
+    th = json.loads(Path(a.thresholds).read_text()) if a.thresholds else 0.5
+    ann = Annotator(
+        model, tok, cfg["max_length"], cfg["tail_tokens"], device=a.device, threshold=th
+    )
     preds = ann.annotate(rows)
     res = {
         "summary": summarize(field_metrics(preds, rows, model.fields)),
@@ -142,6 +145,14 @@ def _evaluate(a):
     if a.output:
         Path(a.output).write_text(out)
     print(json.dumps({k: v for k, v in res.items() if k != "fields"}, indent=2))
+
+
+def _tune(a):
+    from propella_bekko.tune import main as tune_main
+
+    if a.output is None:
+        a.output = str(Path(a.model).parent / "thresholds.json")
+    tune_main(a)
 
 
 def _score(a):
@@ -180,6 +191,7 @@ def _annotate(a):
     from propella_bekko.models import PropellaBekko
 
     model, tok, cfg = PropellaBekko.load(a.model)
+    th = json.loads(Path(a.thresholds).read_text()) if a.thresholds else 0.5
     ann = Annotator(
         model,
         tok,
@@ -187,6 +199,7 @@ def _annotate(a):
         cfg["tail_tokens"],
         device=a.device,
         max_tokens=a.max_tokens,
+        threshold=th,
     )
     pf = pq.ParquetFile(a.input)
     writer = None
@@ -300,6 +313,7 @@ def main(argv=None):
         e.add_argument("--split", default=None, help="optional value of a `split` column")
         e.add_argument("--limit", type=int)
         e.add_argument("--sample", type=int, help="seeded random subset (matches baselines)")
+        e.add_argument("--thresholds", help="thresholds.json from tune-thresholds")
         e.add_argument("--device", default="cuda")
         if name == "evaluate":
             e.add_argument("--output")
@@ -308,6 +322,16 @@ def main(argv=None):
             e.add_argument("--max-tokens", type=int, default=65_536)
             e.add_argument("--compile", action="store_true")
         e.set_defaults(fn=fn)
+
+    tt = sub.add_parser(
+        "tune-thresholds", help="tune multi-select decision thresholds on the val split"
+    )
+    tt.add_argument("--model", required=True)
+    tt.add_argument("--data", required=True)
+    tt.add_argument("--output", default=None)
+    tt.add_argument("--limit", type=int)
+    tt.add_argument("--val-frac", type=float, default=0.02)
+    tt.set_defaults(fn=_tune)
 
     sc = sub.add_parser("score", help="score an annotation parquet against held-out labels")
     sc.add_argument("--pred", required=True)
@@ -325,6 +349,7 @@ def main(argv=None):
     n.add_argument("--chunk-size", type=int, default=20_000)
     n.add_argument("--max-tokens", type=int, default=65_536)
     n.add_argument("--device", default="cuda")
+    n.add_argument("--thresholds", help="thresholds.json from tune-thresholds")
     n.set_defaults(fn=_annotate)
 
     a = p.parse_args(argv)
