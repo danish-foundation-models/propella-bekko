@@ -58,6 +58,7 @@ class TrainConfig:
         None  # cap the share of any single domain in training  # Matryoshka truncation for static backbones
     )
     head_hidden: int | None = None
+    refine: bool = False  # label-conditional second pass
     freeze_backbone: bool = False
     extra: dict = field(default_factory=dict)
 

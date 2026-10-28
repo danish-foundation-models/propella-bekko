@@ -40,6 +40,7 @@ class PropellaBekko(nn.Module):
         dropout: float = 0.1,
         use_length_features: bool = True,
         head_hidden: int | None = None,
+        refine: bool = False,
     ):
         super().__init__()
         self.backbone: Backbone = backbone
@@ -53,6 +54,16 @@ class PropellaBekko(nn.Module):
             nn.Dropout(dropout), nn.Linear(d + extra, h), nn.GELU(), nn.LayerNorm(h)
         )
         self.heads = nn.ModuleDict({f.name: nn.Linear(h, f.num_labels) for f in fields})
+        # second pass: let every field see the first-pass distribution of all fields
+        # (labels are strongly correlated, e.g. quality <-> reasoning <-> educational value)
+        self.refine = refine
+        if refine:
+            n_out = sum(f.num_labels for f in fields)
+            self.refiner = nn.Sequential(
+                nn.Linear(h + n_out, h),
+                nn.GELU(),
+                nn.Linear(h, n_out),
+            )
 
     def forward(self, input_ids, attention_mask, n_chars=None, n_words=None, truncated=None, **_):
         pooled = self.backbone(input_ids, attention_mask)
@@ -63,7 +74,19 @@ class PropellaBekko(nn.Module):
                 -1,
             )
         z = self.proj(pooled)
-        return {name: head(z) for name, head in self.heads.items()}
+        logits = {name: head(z) for name, head in self.heads.items()}
+        if not self.refine:
+            return logits
+        feats = [z]
+        for f in self.fields:
+            lg = logits[f.name].float()
+            feats.append(lg.sigmoid() if f.kind == "multi" else lg.softmax(-1))
+        delta = self.refiner(torch.cat(feats, -1)).to(z.dtype)
+        out, i = {}, 0
+        for f in self.fields:
+            out[f.name] = logits[f.name] + delta[:, i : i + f.num_labels]
+            i += f.num_labels
+        return out
 
     # ------------------------------------------------------------------ #
     def loss(
@@ -145,6 +168,7 @@ class PropellaBekko(nn.Module):
             "fields": fields_to_config(self.fields),
             "use_length_features": self.use_length_features,
             "head_hidden": self.head_hidden,
+            "refine": self.refine,
             "backbone_spec": self.backbone.spec(),
             **(extra_config or {}),
         }
@@ -160,6 +184,7 @@ class PropellaBekko(nn.Module):
             fields_from_config(cfg["fields"]),
             use_length_features=cfg["use_length_features"],
             head_hidden=cfg.get("head_hidden"),
+            refine=cfg.get("refine", False),
         )
         missing, unexpected = model.load_state_dict(
             load_file(str(path / "model.safetensors")), strict=False
