@@ -89,3 +89,23 @@ def test_metrics_perfect():
     assert res["content_integrity"]["accuracy"] == 1.0
     assert res["content_type"]["jaccard"] == 1.0
     assert summarize(res)["mean_single_accuracy"] == 1.0
+
+
+def test_refine_and_pooling_variants():
+    for pool in ("mean", "attn"):
+        bb = StaticBackbone(100, 16, pad_id=0, pool=pool)
+        model = PropellaBekko(bb, FIELDS, head_hidden=32, refine=True)
+        ids = torch.randint(1, 100, (2, 10))
+        mask = torch.ones_like(ids)
+        feats = dict(
+            n_chars=torch.tensor([5, 9]),
+            n_words=torch.tensor([1, 2]),
+            truncated=torch.tensor([False, True]),
+        )
+        logits = model(ids, mask, **feats)
+        assert set(logits) == {f.name for f in FIELDS}
+        targets = {f.name: torch.zeros(2, dtype=torch.long) for f in FIELDS if f.kind == "single"}
+        targets |= {f.name: torch.zeros(2, f.num_labels) for f in FIELDS if f.kind == "multi"}
+        loss, _ = model.loss(logits, targets, ordinal_smoothing=0.1)
+        assert torch.isfinite(loss)
+        assert len(model.decode(logits)) == 2
