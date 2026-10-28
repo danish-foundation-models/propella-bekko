@@ -73,6 +73,7 @@ class PropellaBekko(nn.Module):
         weights: dict[str, float] | None = None,
         pos_weight: dict[str, torch.Tensor] | None = None,
         label_smoothing: float = 0.0,
+        ordinal_smoothing: float = 0.0,
     ):
         total, parts = 0.0, {}
         for f in self.fields:
@@ -80,7 +81,21 @@ class PropellaBekko(nn.Module):
             if f.kind == "single":
                 if (y != -100).sum() == 0:
                     continue
-                l = F.cross_entropy(lg, y, ignore_index=-100, label_smoothing=label_smoothing)
+                if ordinal_smoothing and f.ordinal:
+                    # spread a little mass onto neighbouring levels: the teacher's
+                    # ordinal judgements are noisy at the boundaries
+                    soft = F.one_hot(y.clamp(min=0), f.num_labels).float()
+                    shift = (
+                        torch.roll(soft, 1, dims=1) + torch.roll(soft, -1, dims=1)
+                    ) / 2 * ordinal_smoothing + soft * (1 - ordinal_smoothing)
+                    tgt = ((1 - label_smoothing) * shift + label_smoothing / f.num_labels).clamp(
+                        min=0
+                    )
+                    l = -(tgt * F.log_softmax(lg, -1)).sum(-1)
+                    valid = y != -100
+                    l = l[valid].mean()
+                else:
+                    l = F.cross_entropy(lg, y, ignore_index=-100, label_smoothing=label_smoothing)
             else:
                 valid = y[:, 0] != -100
                 if valid.sum() == 0:

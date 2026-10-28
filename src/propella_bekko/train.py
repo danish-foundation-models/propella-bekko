@@ -51,7 +51,11 @@ class TrainConfig:
     gradient_checkpointing: bool = False
     static_dim: int | None = None
     pos_weight: bool = False  # inverse-frequency positive weights for multi-select BCE
-    label_smoothing: float = 0.0  # Matryoshka truncation for static backbones
+    label_smoothing: float = 0.0
+    ordinal_smoothing: float = 0.0  # spread ordinal targets onto neighbouring levels
+    max_domain_frac: float | None = (
+        None  # cap the share of any single domain in training  # Matryoshka truncation for static backbones
+    )
     head_hidden: int | None = None
     freeze_backbone: bool = False
     extra: dict = field(default_factory=dict)
@@ -68,6 +72,25 @@ def _load_split(path: str, frac: float, seed: int) -> tuple[list[dict], list[dic
     train = [r for r in rows if not _is_val(r, frac)]
     val = [r for r in rows if _is_val(r, frac)]
     return train, val
+
+
+def _cap_domains(rows: list[dict], frac: float, seed: int) -> list[dict]:
+    """Subsample the biggest domains so none exceeds `frac` of the training set."""
+    from collections import defaultdict
+
+    by: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by[r.get("domain") or "?"].append(r)
+    cap = int(frac * len(rows))
+    rng = random.Random(seed)
+    out = []
+    for name, group in sorted(by.items()):
+        if len(group) > cap:
+            log.info("domain %s: %d -> %d rows", name, len(group), cap)
+            group = rng.sample(group, cap)
+        out.extend(group)
+    rng.shuffle(out)
+    return out
 
 
 def build_fields(train_rows: list[dict], top_k: int):
@@ -103,6 +126,8 @@ def train(cfg: TrainConfig) -> dict:
     out.mkdir(parents=True, exist_ok=True)
 
     train_rows, val_rows = _load_split(cfg.data, cfg.val_frac, cfg.seed)
+    if cfg.max_domain_frac:
+        train_rows = _cap_domains(train_rows, cfg.max_domain_frac, cfg.seed)
     train_rows = train_rows[: cfg.max_train_docs] if cfg.max_train_docs else train_rows
     val_rows = val_rows[: cfg.max_eval_docs]
     fields = build_fields(train_rows, cfg.country_top_k)
