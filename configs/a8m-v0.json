@@ -1,0 +1,13 @@
+{
+  "data": "data/train-small.parquet",
+  "heldout": "data/heldout-small.parquet",
+  "backbone": "hotchpotch/bekko-embedding-v1-a8m",
+  "output_dir": "runs/a8m-v0",
+  "max_length": 1024,
+  "tail_tokens": 128,
+  "max_tokens_per_batch": 65536,
+  "epochs": 2,
+  "lr": 0.0001,
+  "head_lr": 0.001,
+  "eval_every": 1000
+}

@@ -130,7 +130,7 @@ def load_backbone(name: str, attn_implementation: str = "sdpa", static_dim: int 
         tok = AutoTokenizer.from_pretrained(Path(tok_dir) / "0_BekkoInference" / "tokenizer")
         return HFBackbone(model), tok
     model = AutoModel.from_pretrained(
-        name, attn_implementation=attn_implementation, trust_remote_code=True
-    )
+        name, attn_implementation=attn_implementation, trust_remote_code=True, dtype=torch.float32
+    )  # fp32 master weights (some checkpoints ship bf16; Turing + GradScaler need fp32)
     tok = AutoTokenizer.from_pretrained(name, trust_remote_code=True)
     return HFBackbone(model), tok
