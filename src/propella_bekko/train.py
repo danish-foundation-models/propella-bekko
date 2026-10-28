@@ -54,9 +54,8 @@ class TrainConfig:
     pos_weight: bool = False  # inverse-frequency positive weights for multi-select BCE
     label_smoothing: float = 0.0
     ordinal_smoothing: float = 0.0  # spread ordinal targets onto neighbouring levels
-    max_domain_frac: float | None = (
-        None  # cap the share of any single domain in training  # Matryoshka truncation for static backbones
-    )
+    max_domain_frac: float | None = None  # cap the share of any single domain in training
+    tune_thresholds: bool = True  # tune multi-select thresholds on val (macro-F1 target)
     head_hidden: int | None = None
     refine: bool = False  # label-conditional second pass
     freeze_backbone: bool = False
@@ -102,7 +101,7 @@ def build_fields(train_rows: list[dict], top_k: int):
     ]
 
 
-def evaluate(model, tok, rows, cfg: TrainConfig, device) -> dict:
+def evaluate(model, tok, rows, cfg: TrainConfig, device, thresholds=None) -> dict:
     model.eval()
     dtype = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}[cfg.dtype]
     ann = Annotator(
@@ -113,6 +112,7 @@ def evaluate(model, tok, rows, cfg: TrainConfig, device) -> dict:
         device=device,
         dtype=torch.float32,
         max_tokens=cfg.max_tokens_per_batch * 2,
+        threshold=thresholds or 0.5,
     )
     with torch.autocast("cuda", dtype=dtype, enabled=cfg.dtype != "fp32"):
         preds = ann.annotate(rows)
@@ -275,6 +275,14 @@ def train(cfg: TrainConfig) -> dict:
             "backbone": cfg.backbone,
         },
     )
+    if cfg.tune_thresholds:
+        from propella_bekko.tune import tune
+
+        th = tune(model, tok, cfg, val_rows, fields)
+        (out / "thresholds.json").write_text(json.dumps(th, indent=2))
+        log.info("tuned thresholds: %s", th)
+        model.eval()
+
     final = evaluate(model, tok, val_rows, cfg, device)
     result = {
         "config": asdict(cfg),
@@ -285,6 +293,10 @@ def train(cfg: TrainConfig) -> dict:
     if cfg.heldout and Path(cfg.heldout).exists():
         heldout_rows = pq.read_table(cfg.heldout).to_pylist()
         result["heldout"] = evaluate(model, tok, heldout_rows, cfg, device)
+        if cfg.tune_thresholds:
+            th = json.loads((out / "thresholds.json").read_text())
+            result["heldout_tuned"] = evaluate(model, tok, heldout_rows, cfg, device, thresholds=th)
+            log.info("held-out (tuned thresholds) %s", result["heldout_tuned"]["summary"])
         log.info("held-out %s", result["heldout"]["summary"])
     (out / "results.json").write_text(json.dumps(result, indent=2))
     return result
