@@ -16,13 +16,20 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import pyarrow.parquet as pq  # noqa: E402
+import argparse
 
-from propella_bekko.paper_metrics import paper_score  # noqa: E402
-from propella_bekko.schema import fields_from_config  # noqa: E402
+import matplotlib.pyplot as plt
+import pyarrow.parquet as pq
 
-N = 1000
+from propella_bekko.paper_metrics import paper_score
+from propella_bekko.schema import fields_from_config
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--n", type=int, default=1000)
+ap.add_argument("--baseline-prefix", default="long1k")
+ap.add_argument("--out", default="docs/assets/pareto.svg")
+args = ap.parse_args()
+N = args.n
 BG, FG, GRID = "#191433", "#ffd45c", "#5e3570"
 COLORS = {"propella": "#ff6fb1", "student": "#5cf2ff"}
 
@@ -54,9 +61,7 @@ llm_paths = sorted(Path("runs/reference").glob("*-1k.parquet"))
 if llm_paths:
     from make_consensus import consensus  # scripts/ dir
 
-    refs["llm"] = {
-        (r["source"], r["id"]): r for r in consensus([load(str(p)) for p in llm_paths])
-    }
+    refs["llm"] = {(r["source"], r["id"]): r for r in consensus([load(str(p)) for p in llm_paths])}
 
 params_M = {
     "propella-1-0.6b": 600,
@@ -75,7 +80,7 @@ for p in sorted(Path("runs/pareto").glob("*.parquet")):
     bench = p.with_suffix(".bench.json")
     if bench.exists():
         models[p.stem] = (load(str(p)), json.loads(bench.read_text())["docs_per_s"], "student")
-for p in sorted(Path("runs/baselines").glob("long1k-*.parquet")):
+for p in sorted(Path("runs/baselines").glob(f"{args.baseline_prefix}-*.parquet")):
     stats = p.with_suffix(".json")
     if stats.exists():
         name = f"propella-1-{p.stem.split('-', 1)[1]}"
@@ -112,13 +117,15 @@ for ref_name, scores in out.items():
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), dpi=150)
 fig.patch.set_facecolor(BG)
-for ax, (ref_name, scores) in zip(axes, out.items(), strict=False):
+for ax in axes:  # style both panels even if one has no data yet
     ax.set_facecolor(BG)
     ax.set_xscale("log")
     ax.grid(color=GRID, linewidth=0.5, alpha=0.6)
-    for s in ax.spines.values():
-        s.set_color(GRID)
+    for sp in ax.spines.values():
+        sp.set_color(GRID)
     ax.tick_params(colors=FG, labelsize=8)
+for ax, ref_name in zip(axes, refs, strict=False):
+    scores = out[ref_name]
     for name, m in sorted(scores.items(), key=lambda kv: kv[1]["docs_per_s"]):
         ax.scatter(
             m["docs_per_s"],
@@ -142,6 +149,6 @@ for ax, (ref_name, scores) in zip(axes, out.items(), strict=False):
 axes[0].set_ylabel("propella-1 overall score", color=FG, fontsize=9)
 fig.suptitle("propella-bekko: annotation quality vs throughput", color=FG, fontsize=11)
 fig.tight_layout()
-Path("docs/assets/pareto.svg").parent.mkdir(parents=True, exist_ok=True)
-fig.savefig("docs/assets/pareto.svg", facecolor=BG)
+Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+fig.savefig(args.out, facecolor=BG)
 print("\nwrote docs/assets/pareto.svg")
