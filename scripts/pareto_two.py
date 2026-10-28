@@ -73,6 +73,11 @@ params_M = {
     "a8m-v1-pool": 106,
     "a25m-v0": 118,
     "a25m-v1-pool": 118,
+    "a25m-domcap": 118,
+    "a25m-pw": 118,
+    "a25m-refine": 118,
+    "a8m-v1-pool": 106,
+    "a8m-domcap": 106,
 }
 
 models = {}
