@@ -1,0 +1,14 @@
+{
+  "data": "data/train-pool-xl.parquet",
+  "heldout": "data/heldout-small.parquet",
+  "backbone": "jhu-clsp/mmBERT-base",
+  "output_dir": "runs/mmbert-base-xl",
+  "max_length": 1024,
+  "tail_tokens": 128,
+  "max_tokens_per_batch": 32768,
+  "epochs": 2,
+  "lr": 5e-05,
+  "head_lr": 0.001,
+  "eval_every": 4000,
+  "grad_accum": 8
+}

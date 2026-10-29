@@ -125,9 +125,13 @@ def _evaluate(a):
         model, tok, cfg["max_length"], cfg["tail_tokens"], device=a.device, threshold=th
     )
     preds = ann.annotate(rows)
+    from propella_bekko.paper_metrics import paper_score
+
+    fm = field_metrics(preds, rows, model.fields)
     res = {
-        "summary": summarize(field_metrics(preds, rows, model.fields)),
-        "fields": field_metrics(preds, rows, model.fields),
+        "summary": summarize(fm),
+        "fields": fm,
+        "paper": paper_score(preds, rows, model.fields),
     }
     # breakdowns
     for col in ("source", "lang", "domain"):
