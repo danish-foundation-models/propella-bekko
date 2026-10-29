@@ -77,6 +77,8 @@ params_M = {
     "a25m-pw": 118,
     "a25m-refine": 118,
     "a8m-domcap": 106,
+    "a8m-xl": 106,
+    "a25m-xl": 118,
 }
 
 models = {}
