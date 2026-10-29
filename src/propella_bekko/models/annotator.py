@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -74,10 +75,9 @@ class PropellaBekko(nn.Module):
         )
         self.heads = nn.ModuleDict({f.name: nn.Linear(h, f.num_labels) for f in fields})
         # multi-select label-count head: the model otherwise under-predicts the number of labels
+        self.count_names = [f.name for f in fields if f.kind == "multi"]
         self.counts = (
-            nn.ModuleDict({f.name: nn.Linear(h, 6) for f in fields if f.kind == "multi"})
-            if count_head
-            else None
+            nn.ModuleDict({n: nn.Linear(h, 6) for n in self.count_names}) if count_head else None
         )
         # second pass: let every field see the first-pass distribution of all fields
         # (labels are strongly correlated, e.g. quality <-> reasoning <-> educational value)
@@ -163,8 +163,9 @@ class PropellaBekko(nn.Module):
             total = total + w * l
             parts[f.name] = l.detach()
         if self.counts is not None and counts is not None:
-            for name in self.counts:
-                head = self.counts[name]
+            heads: Any = self.counts
+            for name in self.count_names:
+                head = heads[name]
                 y = counts[name]
                 valid = y >= 0
                 if valid.any():
