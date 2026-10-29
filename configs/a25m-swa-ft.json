@@ -1,0 +1,15 @@
+{
+  "data": "data/train-pool-xl.parquet",
+  "heldout": "data/heldout-small.parquet",
+  "backbone": "hotchpotch/bekko-embedding-v1-a25m",
+  "output_dir": "runs/a25m-swa-ft",
+  "max_length": 1024,
+  "tail_tokens": 128,
+  "max_tokens_per_batch": 65536,
+  "epochs": 0.15,
+  "lr": 2e-05,
+  "head_lr": 0.0002,
+  "eval_every": 500,
+  "init_from": "runs/a25m-swa/model",
+  "warmup_ratio": 0.0
+}
