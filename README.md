@@ -65,16 +65,16 @@ documents**, against two references. Throughput is documents/second on one Quadr
 | propella-1-4b (reference, re-run) | 4B | 0.22 | 0.875 | 0.737 |
 | propella-1-1.7b | 1.7B | 0.50 | 0.808 | 0.703 |
 | propella-1-0.6b | 0.6B | 0.50 | 0.763 | 0.679 |
-| **a25m-v1-pool** | 118M | **193** | **0.803** | **0.691** |
-| a8m-v1-pool | 106M | 376 | 0.773 | 0.663 |
+| **a25m-xl** | 118M | **186** | **0.811** | **0.708** |
+| a25m-v1-pool | 118M | 193 | 0.803 | 0.691 |
+| a8m-xl | 106M | 348 | 0.783 | 0.679 |
 | static-long-ctx8192 | 206M | 686 | 0.737 | 0.655 |
 
-* `a25m-v1-pool` (25M active parameters, distilled from 403k documents) **matches
-  propella-1-1.7b** against the labels it was distilled from (0.803 vs 0.808) and is clearly
-  ahead of propella-1-0.6b (0.763) — at ~390× the throughput.
-* Against the **independent** DeepSeek reference it lands between 0.6b and 1.7b (0.691 vs
-  0.679 / 0.703): judged by a different annotator, part of the apparent gap to 1.7b is
-  teacher-specific agreement rather than annotation quality.
+* **`a25m-xl`** (25M active parameters, distilled from 845k documents) **matches or beats
+  propella-1-1.7b on both references** — 0.811 vs 0.808 against the stored propella labels and
+  0.708 vs 0.703 against the independent DeepSeek annotations — at ~370× the throughput.
+* It is far ahead of propella-1-0.6b (0.763 / 0.679). Against a *different* annotator the
+  absolute scores drop for every model, including propella-4b itself (0.875 → 0.737).
 * The **static model** (no Transformer layers) is the cheapest useful point: 686 docs/s at
   0.737, about 10% below a8m.
 

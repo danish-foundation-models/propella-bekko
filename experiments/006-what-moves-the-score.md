@@ -12,7 +12,8 @@ overall score (QWK/F1/IoU, arXiv 2602.12414 §5.2) against the stored propella-1
 | propella-1-4b (re-run) | – | reference | 0.22 | **0.875** |
 | propella-1-1.7b | – | – | 0.50 | 0.808 |
 | propella-1-0.6b | – | – | 0.50 | 0.763 |
-| **a25m-v1-pool** | 403k | – | 193 | **0.803** |
+| **a25m-xl** | 845k | 2.1× data | 186 | **0.811** |
+| a25m-v1-pool | 403k | – | 193 | 0.803 |
 | a25m-langcap | 403k | ≤15% per language | 198 | 0.797 |
 | a25m-domcap | 403k | ≤25% per domain | 183 | 0.777 |
 | a25m-domcap-pw | 403k | domcap + class weights | 200 | 0.777 |
@@ -29,7 +30,8 @@ a8m-xl 0.602, a8m-v1-pool 0.582, a8m-domcap 0.589.
 
 ## What moved the score
 
-1. **More data helps, and had not saturated**: a8m 98k → 403k → 845k gives 0.724 → 0.773 → 0.783.
+1. **More data helps, and had not saturated**: a8m 98k → 403k → 845k gives 0.724 → 0.773 → 0.783;
+   a25m 98k → 403k → 845k gives 0.765 → 0.803 → **0.811**, which reaches propella-1-1.7b (0.808).
 2. **Bigger backbone beats more data at equal cost**: a25m on 403k (0.803, 193 docs/s) is better
    than a8m on 845k (0.783, 348 docs/s) — per unit of GPU time they are close, so both are on the
    frontier.
