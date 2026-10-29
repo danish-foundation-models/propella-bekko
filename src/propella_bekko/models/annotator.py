@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -53,14 +52,12 @@ class PropellaBekko(nn.Module):
         head_hidden: int | None = None,
         refine: bool = False,
         rich_length: bool = False,
-        count_head: bool = False,
     ):
         super().__init__()
         self.backbone: Backbone = backbone
         self.fields = fields
         self.use_length_features = use_length_features
         self.rich_length = rich_length
-        self.count_head = count_head
         d = backbone.hidden_size
         h = head_hidden or d
         self.head_hidden = h
@@ -75,10 +72,6 @@ class PropellaBekko(nn.Module):
         )
         self.heads = nn.ModuleDict({f.name: nn.Linear(h, f.num_labels) for f in fields})
         # multi-select label-count head: the model otherwise under-predicts the number of labels
-        self.count_names = [f.name for f in fields if f.kind == "multi"]
-        self.counts = (
-            nn.ModuleDict({n: nn.Linear(h, 6) for n in self.count_names}) if count_head else None
-        )
         # second pass: let every field see the first-pass distribution of all fields
         # (labels are strongly correlated, e.g. quality <-> reasoning <-> educational value)
         self.refine = refine
@@ -103,8 +96,6 @@ class PropellaBekko(nn.Module):
             )
         z = self.proj(pooled)
         logits = {name: head(z) for name, head in self.heads.items()}
-        if self.counts is not None:
-            self.last_counts = {name: head(z) for name, head in self.counts.items()}
         if not self.refine:
             return logits
         feats = [z]
@@ -127,7 +118,6 @@ class PropellaBekko(nn.Module):
         pos_weight: dict[str, torch.Tensor] | None = None,
         label_smoothing: float = 0.0,
         ordinal_smoothing: float = 0.0,
-        counts: dict[str, torch.Tensor] | None = None,
     ):
         total, parts = 0.0, {}
         for f in self.fields:
@@ -162,14 +152,6 @@ class PropellaBekko(nn.Module):
             w = (weights or {}).get(f.name, 1.0)
             total = total + w * l
             parts[f.name] = l.detach()
-        if self.counts is not None and counts is not None:
-            heads: Any = self.counts
-            for name in self.count_names:
-                head = heads[name]
-                y = counts[name]
-                valid = y >= 0
-                if valid.any():
-                    total = total + 0.3 * F.cross_entropy(head[valid].float(), y[valid])
         return total, parts
 
     @torch.no_grad()
@@ -190,12 +172,6 @@ class PropellaBekko(nn.Module):
                 top = p.argmax(-1)
                 thr = threshold.get(f.name, 0.5) if isinstance(threshold, dict) else threshold
                 hot = p >= thr
-                if getattr(self, "last_counts", None) and f.name in self.last_counts:
-                    k = self.last_counts[f.name].argmax(-1).clamp(min=1)  # predicted #labels
-                    hot = torch.zeros_like(p, dtype=torch.bool)
-                    idx = p.topk(int(k.max()), dim=-1).indices
-                    for r in range(p.shape[0]):
-                        hot[r, idx[r, : int(k[r])]] = True
                 hot[torch.arange(bs), top] = True  # propella always emits >=1 value
                 for r, h in zip(rows, hot.tolist(), strict=False):
                     r[f.name] = [lab for lab, on in zip(f.labels, h, strict=False) if on]
@@ -212,7 +188,6 @@ class PropellaBekko(nn.Module):
         cfg = {
             "fields": fields_to_config(self.fields),
             "rich_length": self.rich_length,
-            "count_head": self.count_head,
             "use_length_features": self.use_length_features,
             "head_hidden": self.head_hidden,
             "refine": self.refine,
@@ -233,7 +208,6 @@ class PropellaBekko(nn.Module):
             head_hidden=cfg.get("head_hidden"),
             refine=cfg.get("refine", False),
             rich_length=cfg.get("rich_length", False),
-            count_head=cfg.get("count_head", False),
         )
         missing, unexpected = model.load_state_dict(
             load_file(str(path / "model.safetensors")), strict=False

@@ -65,7 +65,6 @@ class TrainConfig:
     head_hidden: int | None = None
     refine: bool = False  # label-conditional second pass
     rich_length: bool = False  # rubric word-count thresholds as features
-    count_head: bool = True  # predict the number of labels for multi-select fields
     freeze_backbone: bool = False
     extra: dict = field(default_factory=dict)
 
