@@ -77,7 +77,7 @@ async def annotate(rows, propella, a):
     usage = {"prompt_tokens": 0, "completion_tokens": 0}
 
     async with httpx.AsyncClient(
-        base_url=a.base_url, headers={"Authorization": f"Bearer {key}"}, timeout=600
+        base_url=a.base_url, headers={"Authorization": f"Bearer {key}"}, timeout=a.timeout
     ) as client:
 
         async def one(i, r):
@@ -135,6 +135,7 @@ def main():
     p.add_argument("--max-tokens", type=int, default=4096)
     p.add_argument("--max-content-chars", type=int, default=50_000)
     p.add_argument("--no-schema", action="store_true", help="do not send response_format")
+    p.add_argument("--timeout", type=float, default=600.0, help="per-request timeout (s)")
     a = p.parse_args()
 
     propella = load_propella()
