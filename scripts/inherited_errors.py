@@ -9,7 +9,6 @@ against an *independent* reference (DeepSeek):
 
 import json
 import sys
-from collections import Counter
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -17,7 +16,9 @@ import pyarrow.parquet as pq
 from propella_bekko.schema import OTHER, PROPELLA_FIELDS, fields_from_config
 
 student_path, teacher_path, reference_path = sys.argv[1:4]
-fields = fields_from_config(json.loads(Path("runs/static-v0/model/config.json").read_text())["fields"])
+fields = fields_from_config(
+    json.loads(Path("runs/static-v0/model/config.json").read_text())["fields"]
+)
 byname = {f.name: f for f in fields}
 
 
@@ -43,7 +44,7 @@ for f in PROPELLA_FIELDS:
         else:
             labels = set(f.labels)
 
-            def norm(v):
+            def norm(v, labels=labels):
                 return {x if x in labels else OTHER for x in (v or [])}
 
             sr, tr, rr = norm(s), norm(t), norm(r)
@@ -70,4 +71,6 @@ for name, i, o, fx in rows:
     tot_i += i
     tot_o += o
     tot_f += fx
-print(f"\nTOTAL inherited {tot_i}, own {tot_o}, fixed {tot_f} -> {tot_i / (tot_i + tot_o):.0%} of errors are inherited from the teacher")
+print(
+    f"\nTOTAL inherited {tot_i}, own {tot_o}, fixed {tot_f} -> {tot_i / (tot_i + tot_o):.0%} of errors are inherited from the teacher"
+)

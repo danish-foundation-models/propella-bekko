@@ -16,20 +16,30 @@ from propella_bekko.schema import Field, fields_from_config, fields_to_config
 
 
 def length_features(
-    n_chars: torch.Tensor, n_words: torch.Tensor, truncated: torch.Tensor
+    n_chars: torch.Tensor, n_words: torch.Tensor, truncated: torch.Tensor, rich: bool = False
 ) -> torch.Tensor:
-    """Cheap document-level features the encoder cannot see after truncation."""
-    return torch.stack(
-        [
-            torch.log1p(n_chars.float()) / 10.0,
-            torch.log1p(n_words.float()) / 10.0,
-            truncated.float(),
-        ],
-        dim=-1,
-    )
+    """Cheap document-level features the encoder cannot see after truncation.
+
+    `rich` adds the rubric's own word-count thresholds as indicators: the teacher's
+    `content_length` is defined by them (100 / 500 / 2000 words), and inspecting the
+    errors showed the model under-rates long documents without them.
+    """
+    w = n_words.float()
+    if not rich:
+        return torch.stack(
+            [torch.log1p(n_chars.float()) / 10.0, torch.log1p(w) / 10.0, truncated.float()],
+            dim=-1,
+        )
+    base = [
+        torch.log10(w.clamp(min=1)) / 6.0,
+        torch.log10(n_chars.float().clamp(min=1)) / 7.0,
+        truncated.float(),
+    ]
+    return torch.stack([*base, *[(w > t).float() for t in (100, 500, 2000, 5000)]], dim=-1)
 
 
 N_LENGTH_FEATURES = 3
+N_LENGTH_FEATURES_RICH = 7
 
 
 class PropellaBekko(nn.Module):
@@ -41,19 +51,34 @@ class PropellaBekko(nn.Module):
         use_length_features: bool = True,
         head_hidden: int | None = None,
         refine: bool = False,
+        rich_length: bool = False,
+        count_head: bool = False,
     ):
         super().__init__()
         self.backbone: Backbone = backbone
         self.fields = fields
         self.use_length_features = use_length_features
+        self.rich_length = rich_length
+        self.count_head = count_head
         d = backbone.hidden_size
         h = head_hidden or d
         self.head_hidden = h
-        extra = N_LENGTH_FEATURES if use_length_features else 0
+        n_len = (
+            (N_LENGTH_FEATURES_RICH if rich_length else N_LENGTH_FEATURES)
+            if use_length_features
+            else 0
+        )
+        extra = n_len
         self.proj = nn.Sequential(
             nn.Dropout(dropout), nn.Linear(d + extra, h), nn.GELU(), nn.LayerNorm(h)
         )
         self.heads = nn.ModuleDict({f.name: nn.Linear(h, f.num_labels) for f in fields})
+        # multi-select label-count head: the model otherwise under-predicts the number of labels
+        self.counts = (
+            nn.ModuleDict({f.name: nn.Linear(h, 6) for f in fields if f.kind == "multi"})
+            if count_head
+            else None
+        )
         # second pass: let every field see the first-pass distribution of all fields
         # (labels are strongly correlated, e.g. quality <-> reasoning <-> educational value)
         self.refine = refine
@@ -70,11 +95,16 @@ class PropellaBekko(nn.Module):
         if self.use_length_features:
             assert n_chars is not None and n_words is not None and truncated is not None
             pooled = torch.cat(
-                [pooled, length_features(n_chars, n_words, truncated).to(pooled.dtype)],
+                [
+                    pooled,
+                    length_features(n_chars, n_words, truncated, self.rich_length).to(pooled.dtype),
+                ],
                 -1,
             )
         z = self.proj(pooled)
         logits = {name: head(z) for name, head in self.heads.items()}
+        if self.counts is not None:
+            self.last_counts = {name: head(z) for name, head in self.counts.items()}
         if not self.refine:
             return logits
         feats = [z]
@@ -97,6 +127,7 @@ class PropellaBekko(nn.Module):
         pos_weight: dict[str, torch.Tensor] | None = None,
         label_smoothing: float = 0.0,
         ordinal_smoothing: float = 0.0,
+        counts: dict[str, torch.Tensor] | None = None,
     ):
         total, parts = 0.0, {}
         for f in self.fields:
@@ -131,6 +162,13 @@ class PropellaBekko(nn.Module):
             w = (weights or {}).get(f.name, 1.0)
             total = total + w * l
             parts[f.name] = l.detach()
+        if self.counts is not None and counts is not None:
+            for name in self.counts:
+                head = self.counts[name]
+                y = counts[name]
+                valid = y >= 0
+                if valid.any():
+                    total = total + 0.3 * F.cross_entropy(head[valid].float(), y[valid])
         return total, parts
 
     @torch.no_grad()
@@ -151,6 +189,12 @@ class PropellaBekko(nn.Module):
                 top = p.argmax(-1)
                 thr = threshold.get(f.name, 0.5) if isinstance(threshold, dict) else threshold
                 hot = p >= thr
+                if getattr(self, "last_counts", None) and f.name in self.last_counts:
+                    k = self.last_counts[f.name].argmax(-1).clamp(min=1)  # predicted #labels
+                    hot = torch.zeros_like(p, dtype=torch.bool)
+                    idx = p.topk(int(k.max()), dim=-1).indices
+                    for r in range(p.shape[0]):
+                        hot[r, idx[r, : int(k[r])]] = True
                 hot[torch.arange(bs), top] = True  # propella always emits >=1 value
                 for r, h in zip(rows, hot.tolist(), strict=False):
                     r[f.name] = [lab for lab, on in zip(f.labels, h, strict=False) if on]
@@ -166,6 +210,8 @@ class PropellaBekko(nn.Module):
         save_file({k: v.clone() for k, v in sd.items()}, str(path / "model.safetensors"))
         cfg = {
             "fields": fields_to_config(self.fields),
+            "rich_length": self.rich_length,
+            "count_head": self.count_head,
             "use_length_features": self.use_length_features,
             "head_hidden": self.head_hidden,
             "refine": self.refine,
@@ -185,6 +231,8 @@ class PropellaBekko(nn.Module):
             use_length_features=cfg["use_length_features"],
             head_hidden=cfg.get("head_hidden"),
             refine=cfg.get("refine", False),
+            rich_length=cfg.get("rich_length", False),
+            count_head=cfg.get("count_head", False),
         )
         missing, unexpected = model.load_state_dict(
             load_file(str(path / "model.safetensors")), strict=False
