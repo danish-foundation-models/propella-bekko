@@ -10,6 +10,5 @@
   "lr": 8e-05,
   "head_lr": 0.001,
   "eval_every": 4000,
-  "rich_length": true,
-  "count_head": true
+  "rich_length": true
 }
