@@ -51,24 +51,33 @@ uv run propella-bekko annotate  --model runs/static-v0/model --input docs.parque
 
 ## Results
 
-Agreement with the propella-1-4b labels on 300 held-out documents (none of which were
-used for training) versus throughput, all measured on one Quadro RTX 8000:
+The propella-1 **overall score** (11/17 × mean quadratic-weighted kappa over the 11 ordinal
+properties + 1/17 × PII F1 + 5/17 × mean intersection-over-union over the 5 multi-select
+properties, §5.2 of [the paper](https://arxiv.org/abs/2602.12414)) on **1,000 held-out
+documents**, against two references. Throughput is documents/second on one Quadro RTX 8000.
 
 <p align="center">
-  <img src="docs/assets/pareto.svg" alt="Pareto: macro-F1 vs throughput" width="640">
+  <img src="docs/assets/pareto.svg" alt="Pareto: overall annotation score vs throughput, two references" width="900">
 </p>
 
-| model | params | docs/s | single acc | macro-F1 |
+| model | params | docs/s | vs stored propella-1-4b labels | vs DeepSeek-V4.1-Flash |
 |---|---|---|---|---|
-| propella-1-4b (reference, re-run) | 4B | 0.06 | 0.900 | 0.740 |
-| propella-1-1.7b | 1.7B | 0.12 | 0.846 | 0.651 |
-| propella-1-0.6b | 0.6B | 0.15 | 0.813 | 0.586 |
-| **a25m-v1-pool** | 118M | 193 | 0.836 | **0.588** |
-| a8m-v1-pool | 106M | 376 | 0.825 | 0.567 |
-| static-long-ctx8192 | 206M | 686 | 0.810 | 0.543 |
+| propella-1-4b (reference, re-run) | 4B | 0.22 | 0.875 | 0.737 |
+| propella-1-1.7b | 1.7B | 0.50 | 0.808 | 0.703 |
+| propella-1-0.6b | 0.6B | 0.50 | 0.763 | 0.679 |
+| **a25m-v1-pool** | 118M | **193** | **0.803** | **0.691** |
+| a8m-v1-pool | 106M | 376 | 0.773 | 0.663 |
+| static-long-ctx8192 | 206M | 686 | 0.737 | 0.655 |
 
-`a25m-v1-pool` matches propella-1-0.6b's agreement while being ~1,300× faster.
-propella-1-4b agrees with itself at macro-F1 0.740, which is the practical ceiling.
+* `a25m-v1-pool` (25M active parameters, distilled from 403k documents) **matches
+  propella-1-1.7b** against the labels it was distilled from (0.803 vs 0.808) and is clearly
+  ahead of propella-1-0.6b (0.763) — at ~390× the throughput.
+* Against the **independent** DeepSeek reference it lands between 0.6b and 1.7b (0.691 vs
+  0.679 / 0.703): judged by a different annotator, part of the apparent gap to 1.7b is
+  teacher-specific agreement rather than annotation quality.
+* The **static model** (no Transformer layers) is the cheapest useful point: 686 docs/s at
+  0.737, about 10% below a8m.
+
 Per-run details in [`experiments/`](experiments/). Tracked in the
 [tracking issue](../../issues?q=label%3Atracking).
 
