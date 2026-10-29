@@ -55,6 +55,7 @@ class TrainConfig:
     label_smoothing: float = 0.0
     ordinal_smoothing: float = 0.0  # spread ordinal targets onto neighbouring levels
     max_domain_frac: float | None = None  # cap the share of any single domain in training
+    max_lang_frac: float | None = None  # cap the share of any single language in training
     tune_thresholds: bool = True  # tune multi-select thresholds on val (macro-F1 target)
     head_hidden: int | None = None
     refine: bool = False  # label-conditional second pass
@@ -75,19 +76,19 @@ def _load_split(path: str, frac: float, seed: int) -> tuple[list[dict], list[dic
     return train, val
 
 
-def _cap_domains(rows: list[dict], frac: float, seed: int) -> list[dict]:
-    """Subsample the biggest domains so none exceeds `frac` of the training set."""
+def _cap_groups(rows: list[dict], key: str, frac: float, seed: int) -> list[dict]:
+    """Subsample the biggest groups (by `key`) so none exceeds `frac` of the training set."""
     from collections import defaultdict
 
     by: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
-        by[r.get("domain") or "?"].append(r)
+        by[r.get(key) or "?"].append(r)
     cap = int(frac * len(rows))
     rng = random.Random(seed)
     out = []
     for name, group in sorted(by.items()):
         if len(group) > cap:
-            log.info("domain %s: %d -> %d rows", name, len(group), cap)
+            log.info("%s %s: %d -> %d rows", key, name, len(group), cap)
             group = rng.sample(group, cap)
         out.extend(group)
     rng.shuffle(out)
@@ -129,7 +130,9 @@ def train(cfg: TrainConfig) -> dict:
 
     train_rows, val_rows = _load_split(cfg.data, cfg.val_frac, cfg.seed)
     if cfg.max_domain_frac:
-        train_rows = _cap_domains(train_rows, cfg.max_domain_frac, cfg.seed)
+        train_rows = _cap_groups(train_rows, "domain", cfg.max_domain_frac, cfg.seed)
+    if cfg.max_lang_frac:
+        train_rows = _cap_groups(train_rows, "lang", cfg.max_lang_frac, cfg.seed)
     train_rows = train_rows[: cfg.max_train_docs] if cfg.max_train_docs else train_rows
     val_rows = val_rows[: cfg.max_eval_docs]
     fields = build_fields(train_rows, cfg.country_top_k)
