@@ -37,8 +37,11 @@ def tune(
     grid=(0.1, 0.5, 0.05),
     objective: str = "f1",
 ) -> dict[str, float]:
+    def _get(key):
+        return cfg[key] if isinstance(cfg, dict) else getattr(cfg, key)
+
     ann = Annotator(
-        model, tok, cfg["max_length"], cfg["tail_tokens"], device="cuda", max_tokens=262144
+        model, tok, _get("max_length"), _get("tail_tokens"), device="cuda", max_tokens=262144
     )
     probs = ann.probabilities(rows)
     targets = [encode_labels(r, fields) for r in rows]
