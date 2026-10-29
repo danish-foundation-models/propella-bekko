@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -155,6 +156,28 @@ class PropellaBekko(nn.Module):
             total = total + w * l
             parts[f.name] = l.detach()
         return total, parts
+
+    @torch.no_grad()
+    def init_labels_from_text(self, tokenizer: Any, max_length: int = 24) -> None:
+        """Initialise classification rows from the label names' own embeddings.
+
+        GLiClass feeds label tokens through the encoder and scores the document against them;
+        the cheap version of that idea is to start each output row at the pooled embedding of
+        the label's name, so rare classes (a country name, a niche sector) begin from their
+        meaning instead of from noise. Trainable afterwards like any other head.
+        """
+        self.eval()
+        heads: Any = self.heads
+        for f in self.fields:
+            names = [lab.replace("_", " ") for lab in f.labels]
+            enc = tokenizer(
+                names, padding=True, truncation=True, max_length=max_length, return_tensors="pt"
+            ).to(self.device)
+            pooled = self.backbone(enc["input_ids"], enc["attention_mask"])
+            w = pooled / pooled.norm(dim=-1, keepdim=True).clamp(min=1e-6)
+            heads[f.name].weight.copy_(w)
+            heads[f.name].bias.zero_()
+            del enc, pooled, w
 
     @torch.no_grad()
     def decode(

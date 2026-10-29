@@ -65,6 +65,7 @@ class TrainConfig:
     head_hidden: int | None = None
     refine: bool = False  # label-conditional second pass
     rich_length: bool = False  # rubric word-count thresholds as features
+    label_init: bool = False  # start output rows at the label names' own embeddings
     freeze_backbone: bool = False
     extra: dict = field(default_factory=dict)
 
