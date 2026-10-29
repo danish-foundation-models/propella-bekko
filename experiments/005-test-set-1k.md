@@ -19,6 +19,7 @@ PII F1 + 5/17 × mean IoU (multi-select).
 
 | model | docs/s | vs stored propella labels | vs LLM (DeepSeek) |
 |---|---|---|---|
+| propella-1-4b (re-run) | 0.22 | 0.875 | 0.737 |
 | propella-1-1.7b | 0.50 | 0.808 | 0.703 |
 | propella-1-0.6b | 0.50 | 0.763 | 0.679 |
 | **a25m-v1-pool** | 193 | **0.803** | 0.691 |
