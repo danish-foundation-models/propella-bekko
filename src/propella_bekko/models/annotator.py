@@ -52,12 +52,14 @@ class PropellaBekko(nn.Module):
         head_hidden: int | None = None,
         refine: bool = False,
         rich_length: bool = False,
+        ordinal_decode: str = "expected",
     ):
         super().__init__()
         self.backbone: Backbone = backbone
         self.fields = fields
         self.use_length_features = use_length_features
         self.rich_length = rich_length
+        self.ordinal_decode = ordinal_decode
         d = backbone.hidden_size
         h = head_hidden or d
         self.head_hidden = h
@@ -164,7 +166,15 @@ class PropellaBekko(nn.Module):
         for f in self.fields:
             lg = logits[f.name].float()
             if f.kind == "single":
-                idx = lg.argmax(-1).tolist()
+                if f.ordinal and self.ordinal_decode == "expected":
+                    # decode the ordinal scale in expectation, not by argmax: the metric is
+                    # quadratic-weighted kappa, which rewards being close (System-One 'Score')
+                    p = lg.softmax(-1)
+                    ranks = torch.arange(f.num_labels, device=lg.device, dtype=p.dtype)
+                    exp = (p * ranks).sum(-1).round().clamp(0, f.num_labels - 1).long()
+                    idx = exp.tolist()
+                else:
+                    idx = lg.argmax(-1).tolist()
                 for r, i in zip(rows, idx, strict=False):
                     r[f.name] = f.labels[i]
             else:
@@ -188,6 +198,7 @@ class PropellaBekko(nn.Module):
         cfg = {
             "fields": fields_to_config(self.fields),
             "rich_length": self.rich_length,
+            "ordinal_decode": self.ordinal_decode,
             "use_length_features": self.use_length_features,
             "head_hidden": self.head_hidden,
             "refine": self.refine,
@@ -208,6 +219,7 @@ class PropellaBekko(nn.Module):
             head_hidden=cfg.get("head_hidden"),
             refine=cfg.get("refine", False),
             rich_length=cfg.get("rich_length", False),
+            ordinal_decode=cfg.get("ordinal_decode", "expected"),
         )
         missing, unexpected = model.load_state_dict(
             load_file(str(path / "model.safetensors")), strict=False
