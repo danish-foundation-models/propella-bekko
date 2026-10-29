@@ -57,7 +57,7 @@ properties, §5.2 of [the paper](https://arxiv.org/abs/2602.12414)) on **1,000 h
 documents**, against two references. Throughput is documents/second on one Quadro RTX 8000.
 
 <p align="center">
-  <img src="docs/assets/pareto.svg" alt="Pareto: overall annotation score vs throughput, two references" width="900">
+  <img src="docs/assets/pareto.svg" alt="Pareto: agreement with DeepSeek-V4.1-Flash annotations vs throughput" width="900">
 </p>
 
 | model | params | docs/s | vs stored propella-1-4b labels | vs DeepSeek-V4.1-Flash |
