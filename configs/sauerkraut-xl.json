@@ -5,10 +5,11 @@
   "output_dir": "runs/sauerkraut-xl",
   "max_length": 512,
   "tail_tokens": 128,
-  "max_tokens_per_batch": 65536,
+  "max_tokens_per_batch": 32768,
   "epochs": 2,
   "lr": 0.0001,
   "head_lr": 0.001,
   "eval_every": 4000,
-  "head_hidden": null
+  "head_hidden": null,
+  "grad_accum": 8
 }

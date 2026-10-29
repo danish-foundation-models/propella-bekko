@@ -62,5 +62,12 @@ out = pa.Table.from_pylist(kept, schema=t.schema)
 pq.write_table(out, dst, compression="zstd")
 print(f"kept {out.num_rows} ({out.num_rows / n0:.1%}); removed {stats}")
 for col in ("domain", "lang"):
-    print(col, dict(pc.value_counts(out.column(col)).to_pylist() and
-                    [(d["values"], d["counts"]) for d in pc.value_counts(out.column(col)).to_pylist()][:6]))
+    print(
+        col,
+        dict(
+            pc.value_counts(out.column(col)).to_pylist()
+            and [(d["values"], d["counts"]) for d in pc.value_counts(out.column(col)).to_pylist()][
+                :6
+            ]
+        ),
+    )
