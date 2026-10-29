@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pyarrow.parquet as pq
 import torch
+from safetensors.torch import load_file, save_file
 
 from propella_bekko.encoding import Encoder
 from propella_bekko.inference import Annotator, token_budget_batches
@@ -57,6 +58,10 @@ class TrainConfig:
     max_domain_frac: float | None = None  # cap the share of any single domain in training
     max_lang_frac: float | None = None  # cap the share of any single language in training
     tune_thresholds: bool = True  # tune multi-select thresholds on val (macro-F1 target)
+    save_every: int = 0  # save a trajectory checkpoint every N optimizer steps
+    swa: int = 0  # average the last K trajectory checkpoints before the final save
+    swa_finetune: int = 0  # low-LR steps after averaging
+    init_from: str | None = None  # start from these weights (e.g. an averaged checkpoint)
     head_hidden: int | None = None
     refine: bool = False  # label-conditional second pass
     freeze_backbone: bool = False
@@ -260,6 +265,15 @@ def train(cfg: TrainConfig) -> dict:
                     loss.item(),
                     step / (time.time() - t_start),
                 )
+            if cfg.save_every and step % cfg.save_every == 0:
+                ck = out / "ckpt"
+                ck.mkdir(exist_ok=True)
+                save_file(
+                    {k: v.detach().float().cpu().clone() for k, v in model.state_dict().items()},
+                    str(ck / f"step{step:07d}.safetensors"),
+                )
+                for old in sorted(ck.glob("step*.safetensors"))[: -max(cfg.swa, 1) - 1]:
+                    old.unlink()
             if step % cfg.eval_every == 0 or step == total_steps:
                 r = evaluate(model, tok, val_rows, cfg, device)
                 r["step"] = step
@@ -268,6 +282,17 @@ def train(cfg: TrainConfig) -> dict:
             if step >= total_steps:
                 break
         ep += 1
+
+    if cfg.swa:
+        cks = sorted((out / "ckpt").glob("step*.safetensors"))[-cfg.swa :]
+        if cks:
+            avg = {}
+            for c in cks:
+                sd = load_file(str(c))
+                for k, v in sd.items():
+                    avg[k] = avg.get(k, 0) + v / len(cks)
+            model.load_state_dict(avg, strict=False)
+            log.info("SWA over %d checkpoints: %s", len(cks), [c.name for c in cks])
 
     model.save(
         out / "model",
