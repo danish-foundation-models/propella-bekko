@@ -22,7 +22,21 @@ from propella_bekko.models import PropellaBekko
 from propella_bekko.schema import Field, encode_labels
 
 
-def tune(model, tok, cfg, rows, fields: list[Field], grid=(0.1, 0.5, 0.05)) -> dict[str, float]:
+def _iou(pred, gold) -> float:
+    inter = (pred * gold).sum()
+    union = ((pred + gold) > 0).sum()
+    return float(inter / union) if union else 1.0
+
+
+def tune(
+    model,
+    tok,
+    cfg,
+    rows,
+    fields: list[Field],
+    grid=(0.1, 0.5, 0.05),
+    objective: str = "f1",
+) -> dict[str, float]:
     ann = Annotator(
         model, tok, cfg["max_length"], cfg["tail_tokens"], device="cuda", max_tokens=262144
     )
@@ -53,7 +67,7 @@ def main(a):
     rows = [r for r in pq.read_table(a.data).to_pylist() if _is_val(r, a.val_frac)]
     if a.limit:
         rows = rows[: a.limit]
-    th = tune(model, tok, cfg, rows, model.fields)
+    th = tune(model, tok, cfg, rows, model.fields, objective=a.objective)
     Path(a.output).write_text(json.dumps(th, indent=2))
     print(json.dumps(th, indent=2))
 

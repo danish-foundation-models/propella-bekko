@@ -331,6 +331,7 @@ def main(argv=None):
     tt.add_argument("--output", default=None)
     tt.add_argument("--limit", type=int)
     tt.add_argument("--val-frac", type=float, default=0.02)
+    tt.add_argument("--objective", default="iou", choices=["iou", "f1"])
     tt.set_defaults(fn=_tune)
 
     sc = sub.add_parser("score", help="score an annotation parquet against held-out labels")
