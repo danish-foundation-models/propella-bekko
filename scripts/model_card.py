@@ -21,7 +21,7 @@ TIERS = {
     "static": dict(
         desc="206M parameters with no Transformer layers — 686 documents/s on one RTX 8000",
         backbone="[`bekko-static-embedding-v1`](https://huggingface.co/hotchpotch/bekko-static-embedding-v1) "
-                 "— static token embeddings pooled into one document vector, no attention",
+        "— static token embeddings pooled into one document vector, no attention",
         params="206M",
         max_length="8,192",
         tail_tokens="512",

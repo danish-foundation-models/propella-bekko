@@ -23,7 +23,7 @@ BG = "#ffffff"
 FG = "#1a1a1a"
 GRID = "#e3e3e3"
 MUTED = "#8c8c8c"
-STUDENT = "#0072b2"   # Okabe-Ito blue
+STUDENT = "#0072b2"  # Okabe-Ito blue
 PROPELLA = "#d55e00"  # Okabe-Ito vermillion
 RULE = "#333333"
 FRONTIER = "#555555"
@@ -101,57 +101,124 @@ def render(path: Path) -> None:
     ax.set_ylim(low - 0.045, max(ys) + 0.045)
 
     if chance:
-        ax.axhline(chance["macro_f1"], color=MUTED, linewidth=1.0,
-                   linestyle=(0, (1, 2.5)), zorder=2)
-        ax.annotate(f"chance — most frequent label ({chance['macro_f1']:.2f})",
-                    (0.012, chance["macro_f1"]), xycoords=("axes fraction", "data"),
-                    xytext=(0, 5), textcoords="offset points", fontsize=8.5,
-                    color=MUTED, ha="left", va="bottom")
+        ax.axhline(
+            chance["macro_f1"], color=MUTED, linewidth=1.0, linestyle=(0, (1, 2.5)), zorder=2
+        )
+        ax.annotate(
+            f"chance — most frequent label ({chance['macro_f1']:.2f})",
+            (0.012, chance["macro_f1"]),
+            xycoords=("axes fraction", "data"),
+            xytext=(0, 5),
+            textcoords="offset points",
+            fontsize=8.5,
+            color=MUTED,
+            ha="left",
+            va="bottom",
+        )
 
     # The other LLM: quality level only, no GPU throughput to place on the x axis.
     for name, m in other_llm.items():
         ax.axhline(m["macro_f1"], color=RULE, linewidth=1.2, linestyle=(0, (6, 4)), zorder=2)
-        ax.annotate(f"{LLM_LABEL.get(name, name)} — {m['macro_f1']:.2f}",
-                    (1.0, m["macro_f1"]), xycoords=("axes fraction", "data"),
-                    xytext=(0, 5), textcoords="offset points", fontsize=9.5,
-                    color=RULE, ha="right", va="bottom")
+        ax.annotate(
+            f"{LLM_LABEL.get(name, name)} — {m['macro_f1']:.2f}",
+            (1.0, m["macro_f1"]),
+            xycoords=("axes fraction", "data"),
+            xytext=(0, 5),
+            textcoords="offset points",
+            fontsize=9.5,
+            color=RULE,
+            ha="right",
+            va="bottom",
+        )
 
     if len(frontier) > 1:
-        ax.plot([m["docs_per_s"] for m in frontier], [m["macro_f1"] for m in frontier],
-                color=FRONTIER, linewidth=1.3, alpha=0.55, zorder=3, solid_capstyle="round")
+        ax.plot(
+            [m["docs_per_s"] for m in frontier],
+            [m["macro_f1"] for m in frontier],
+            color=FRONTIER,
+            linewidth=1.3,
+            alpha=0.55,
+            zorder=3,
+            solid_capstyle="round",
+        )
 
     for name, m in points.items():
         lead = m["docs_per_s"] in on_frontier
         color = STUDENT if m["family"] == "student" else PROPELLA
-        ax.scatter(m["docs_per_s"], m["macro_f1"], s=150 if lead else 80,
-                   color=color, edgecolor=BG, linewidth=1.4 if lead else 1.0,
-                   alpha=1.0 if lead else 0.35, zorder=4)
+        ax.scatter(
+            m["docs_per_s"],
+            m["macro_f1"],
+            s=150 if lead else 80,
+            color=color,
+            edgecolor=BG,
+            linewidth=1.4 if lead else 1.0,
+            alpha=1.0 if lead else 0.35,
+            zorder=4,
+        )
         label = (PROPELLA_LABEL if m["family"] == "propella" else STUDENT_LABEL).get(name, name)
         dx, dy, ha = LABEL_OFFSET.get(name, (14, 0, "left"))
         ax.annotate(
-            label, xy=(m["docs_per_s"], m["macro_f1"]), xytext=(dx, dy),
-            textcoords="offset points", fontsize=9.5,
-            color=FG if lead else MUTED, ha=ha, va="center", zorder=5,
+            label,
+            xy=(m["docs_per_s"], m["macro_f1"]),
+            xytext=(dx, dy),
+            textcoords="offset points",
+            fontsize=9.5,
+            color=FG if lead else MUTED,
+            ha=ha,
+            va="center",
+            zorder=5,
             # A leader line, because on a four-decade log axis a label a few points away
             # is ambiguous about which dot it belongs to.
-            arrowprops=dict(arrowstyle="-", color=FG if lead else MUTED, linewidth=0.7,
-                            alpha=0.35, shrinkA=2, shrinkB=5),
+            arrowprops=dict(
+                arrowstyle="-",
+                color=FG if lead else MUTED,
+                linewidth=0.7,
+                alpha=0.35,
+                shrinkA=2,
+                shrinkB=5,
+            ),
         )
 
     handles = [
-        plt.Line2D([], [], marker="o", linestyle="", color=STUDENT, markeredgecolor=BG,
-                   markersize=9, label="propella-bekko· one forward pass"),
-        plt.Line2D([], [], marker="o", linestyle="", color=PROPELLA, markeredgecolor=BG,
-                   markersize=9, label="propella-1 · generative"),
+        plt.Line2D(
+            [],
+            [],
+            marker="o",
+            linestyle="",
+            color=STUDENT,
+            markeredgecolor=BG,
+            markersize=9,
+            label="propella-bekko· one forward pass",
+        ),
+        plt.Line2D(
+            [],
+            [],
+            marker="o",
+            linestyle="",
+            color=PROPELLA,
+            markeredgecolor=BG,
+            markersize=9,
+            label="propella-1 · generative",
+        ),
         plt.Line2D([], [], color=FRONTIER, linewidth=1.3, alpha=0.55, label="Pareto frontier"),
     ]
-    leg = ax.legend(handles=handles, loc="lower right", frameon=False, fontsize=9,
-                    handletextpad=0.6, borderaxespad=1.0)
+    leg = ax.legend(
+        handles=handles,
+        loc="lower right",
+        frameon=False,
+        fontsize=9,
+        handletextpad=0.6,
+        borderaxespad=1.0,
+    )
     for text in leg.get_texts():
         text.set_color(FG)
 
-    ax.set_xlabel("documents per second on one Quadro RTX 8000, log scale  →  faster",
-                  color=FG, fontsize=10.5, labelpad=10)
+    ax.set_xlabel(
+        "documents per second on one Quadro RTX 8000, log scale  →  faster",
+        color=FG,
+        fontsize=10.5,
+        labelpad=10,
+    )
     ax.set_ylabel(f"agreement with {ref_name} (macro-F1)", color=FG, fontsize=10.5, labelpad=10)
 
     for ext in ("svg", "png"):
