@@ -133,11 +133,14 @@ state = load_file(str(path / "model.safetensors"))
 
 {encoder_block}
 hidden = cfg["head_hidden"]
-proj = nn.Sequential(nn.Dropout(0.1), nn.Linear(dim + 3, hidden),
-                     nn.GELU(), nn.LayerNorm(hidden))
-proj.load_state_dict({k.removeprefix("proj."): v for k, v in state.items() if k.startswith("proj.")})
+proj = nn.Sequential(nn.Dropout(0.1), nn.Linear(dim + 3, hidden), nn.GELU(), nn.LayerNorm(hidden))
+proj.load_state_dict(
+    {k.removeprefix("proj."): v for k, v in state.items() if k.startswith("proj.")}
+)
 heads = nn.ModuleDict({f["name"]: nn.Linear(hidden, len(f["labels"])) for f in cfg["fields"]})
-heads.load_state_dict({k.removeprefix("heads."): v for k, v in state.items() if k.startswith("heads.")})
+heads.load_state_dict(
+    {k.removeprefix("heads."): v for k, v in state.items() if k.startswith("heads.")}
+)
 
 tokenizer = AutoTokenizer.from_pretrained(path / "tokenizer")
 max_length, tail = cfg["max_length"], cfg["tail_tokens"]
@@ -155,11 +158,15 @@ def annotate(text: str) -> dict:
     with torch.inference_mode():
         pooled = pool_text(input_ids, attention_mask)
         # length features: the encoder cannot see the full document after truncation
-        features = torch.tensor([[
-            torch.log1p(torch.tensor(float(len(text)))) / 10,
-            torch.log1p(torch.tensor(float(len(text.split())))) / 10,
-            float(cut or "\n[...]\n" in text),
-        ]])
+        features = torch.tensor(
+            [
+                [
+                    torch.log1p(torch.tensor(float(len(text)))) / 10,
+                    torch.log1p(torch.tensor(float(len(text.split())))) / 10,
+                    float(cut or "\n[...]\n" in text),
+                ]
+            ]
+        )
         z = proj(torch.cat([pooled, features], -1))
         logits = {name: head(z)[0] for name, head in heads.items()}
 
@@ -168,7 +175,7 @@ def annotate(text: str) -> dict:
         name, labels, lg = f["name"], f["labels"], logits[f["name"]]
         if f["kind"] == "multi":
             hot = lg.sigmoid() >= 0.5
-            hot[lg.argmax()] = True          # always at least one label
+            hot[lg.argmax()] = True  # always at least one label
             out[name] = [lab for lab, on in zip(labels, hot) if on]
         elif f.get("ordinal"):
             ranks = torch.arange(len(labels), dtype=torch.float)
