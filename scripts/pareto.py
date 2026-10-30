@@ -10,6 +10,7 @@ measured on one GPU; the other LLM is a dashed quality rule; chance is a dotted 
 the solid grey line is the Pareto set (no faster model is at least as good).
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -53,6 +54,7 @@ LABEL_OFFSET = {
     "propella-1-0.6b": (14, -12, "left"),
 }
 X_TICKS = [0.1, 1, 10, 100, 1000]
+HARDWARE = "one Quadro RTX 8000"
 
 
 def pareto_set(points: list[dict]) -> list[dict]:
@@ -245,7 +247,7 @@ def axis_titles(
         ax.text(
             0.5,
             -0.245,
-            "on one Quadro RTX 8000",
+            f"on {HARDWARE}",
             transform=ax.transAxes,
             ha="center",
             va="top",
@@ -349,6 +351,10 @@ def render_combined(paths: list[Path]) -> None:
 
 
 def main() -> None:
+    global HARDWARE
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--hardware", default=HARDWARE, help="what the x axis was measured on")
+    HARDWARE = ap.parse_args().hardware
     Path("docs/assets").mkdir(parents=True, exist_ok=True)
     paths = sorted(Path("runs").glob("pareto_vs_*.json"))
     for path in paths:

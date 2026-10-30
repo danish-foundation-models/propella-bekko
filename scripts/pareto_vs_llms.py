@@ -24,6 +24,9 @@ from propella_bekko.metrics import field_metrics
 from propella_bekko.schema import fields_from_config
 
 N = 300
+# Baselines measured in bf16 on an Ampere card supersede the fp16 Turing runs; both are
+# kept on disk, the figures use the bf16 ones when present.
+BASELINE_DIR = Path("runs/baselines/bf16")
 STUDENTS = ["static-long-ctx8192", "a8m-xl", "a25m-xl"]
 PROPELLA = {
     "propella-1-0.6b": ("0.6b", 600),
@@ -106,7 +109,11 @@ def main() -> None:
             }
 
         for name, (short, params) in PROPELLA.items():
-            stem_p = f"runs/baselines/long300-{short}"
+            stem_p = (
+                str(BASELINE_DIR / f"propella-1-{short}")
+                if (BASELINE_DIR / f"propella-1-{short}.parquet").exists()
+                else f"runs/baselines/long300-{short}"
+            )
             preds = load_predictions(stem_p)
             if preds is None:
                 print("skip", name, "(no predictions)")

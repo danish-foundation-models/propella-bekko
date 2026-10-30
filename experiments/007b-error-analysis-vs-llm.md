@@ -1,6 +1,8 @@
-# Error analysis — a25m-xl on the 1,000-doc test set
+# 007b — error analysis against the LLM reference
 
-Student: `runs/a25m-xl` (25M active, 845k training docs). Reference: stored propella-1-4b labels.
+Same run as [`007`](007-error-analysis.md), but scored against the independent DeepSeek-V4.1-Flash
+annotations instead of the stored propella-1-4b labels: student `runs/a25m-xl` (25M active, 845k
+training docs).
 
 Overall **0.708** (QWK 0.671, IoU 0.771, PII-F1 0.803)
 

@@ -73,6 +73,7 @@ def main() -> None:
     ap.add_argument("--mf1-glm", required=True)
     ap.add_argument("--n-train", default="the training pool (403k documents)")
     ap.add_argument("--n-langs", default="20")
+    ap.add_argument("--hardware", default="one Quadro RTX 8000", help="where docs/s was measured")
     ap.add_argument("--train-minutes", help="override when the run kept no results.json")
     a = ap.parse_args()
 
@@ -164,6 +165,7 @@ dim = spec["dim"]"""
         "train_setup": train_setup,
         "n_train": a.n_train,
         "n_langs": a.n_langs,
+        "hardware": a.hardware,
         "title": a.repo_name[:1].upper() + a.repo_name[1:],
         "student_rows": student_rows(a.repo_name),
         "train_minutes": minutes,

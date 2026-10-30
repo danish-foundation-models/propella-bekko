@@ -55,10 +55,22 @@ def main():
     p.add_argument("--max-content-chars", type=int, default=50_000)
     p.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     p.add_argument("--dtype", default="float16")  # Turing has no bf16
+    p.add_argument(
+        "--structured-backend",
+        default="xgrammar",
+        help="vLLM structured-output backend; the default avoids flashinfer's nvcc requirement",
+    )
     a = p.parse_args()
 
     from vllm import LLM, SamplingParams
-    from vllm.sampling_params import StructuredOutputsParams
+
+    # Newer vLLM picks a structured-output backend that may need nvcc to JIT; xgrammar does not.
+    try:
+        from vllm.config import StructuredOutputsConfig
+
+        structured_cfg = StructuredOutputsConfig(backend=a.structured_backend)
+    except ImportError:  # older vLLM: the default backend is already xgrammar
+        structured_cfg = None
 
     propella = load_propella(a.model)
     rows = pq.read_table(a.input, columns=["source", "id", "text"]).to_pylist()
@@ -75,14 +87,22 @@ def main():
         max_model_len=a.max_model_len,
         gpu_memory_utilization=a.gpu_memory_utilization,
         enable_prefix_caching=True,
+        **({"structured_outputs_config": structured_cfg} if structured_cfg else {}),
     )
     tok = llm.get_tokenizer()
     schema = propella.get_annotation_response_schema(flatten=True, compact_whitespace=True)
-    sp = SamplingParams(
-        temperature=0.0,
-        max_tokens=1024,
-        structured_outputs=StructuredOutputsParams(json=schema),
-    )
+    # Schema-constrained decoding: the kwarg moved twice between vLLM releases.
+    if hasattr(__import__("vllm.sampling_params", fromlist=["x"]), "StructuredOutputsParams"):
+        from vllm.sampling_params import StructuredOutputsParams
+
+        json_kwargs = {"structured_outputs": StructuredOutputsParams(json=schema)}
+    elif hasattr(__import__("vllm.sampling_params", fromlist=["x"]), "GuidedDecodingParams"):
+        from vllm.sampling_params import GuidedDecodingParams
+
+        json_kwargs = {"guided_decoding": GuidedDecodingParams(json=schema)}
+    else:
+        json_kwargs = {"guided_json": schema}
+    sp = SamplingParams(temperature=0.0, max_tokens=1024, **json_kwargs)
     prompts = []
     for r in rows:
         msgs = propella.create_messages(r["text"], max_content_chars=a.max_content_chars)

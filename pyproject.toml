@@ -3,8 +3,9 @@ name = "propella-bekko"
 version = "0.1.0"
 description = "Fast document annotation models (propella-1 label space) for pretraining-data curation"
 readme = "README.md"
+license = "MIT"
 authors = [
-    { name = "Kenneth", email = "kennethenevoldsen@gmail.com" }
+    { name = "Kenneth Enevoldsen", email = "kenneth.enevoldsen@cas.au.dk" }
 ]
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -16,6 +17,11 @@ dependencies = [
     "tqdm>=4.70.1",
     "transformers>=5.21.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/danish-foundation-models/propella-bekko"
+Models = "https://huggingface.co/danish-foundation-models/propella-bekko-a25m"
+Dataset = "https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data"
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]

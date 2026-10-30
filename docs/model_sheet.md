@@ -41,7 +41,7 @@ and region it belongs to — as JSON, without a task-specific prompt.
 
 **{title}** distils the largest of them, propella-1-4b, into a model small enough to run over
 whole corpora: the same label space, predicted in one forward pass, without generating text. It has
-{params} parameters and annotates {docs_per_s} documents per second on one Quadro RTX 8000.
+{params} parameters and annotates {docs_per_s} documents per second on {hardware}.
 
 <p align="center">
   <img src="pareto_combined.svg" width="780" alt="annotation quality against throughput, against two independent annotators" />
