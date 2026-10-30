@@ -44,13 +44,12 @@ whole corpora: the same label space, predicted in one forward pass, without gene
 {params} parameters and annotates {docs_per_s} documents per second on one Quadro RTX 8000.
 
 <p align="center">
-  <img src="pareto_deepseek-v4.1-flash.svg" width="49%" />
-  <img src="pareto_glm-5.3-flash.svg" width="49%" />
+  <img src="pareto_combined.svg" width="480" alt="annotation quality against throughput, against two independent annotators" />
 </p>
 
-Agreement with two annotators that are not the teacher — DeepSeek-V4.1-Flash on the left,
-GLM-5.3-Flash on the right — against throughput. Both were asked to annotate the same 300 held-out
-documents with propella's own prompt and schema.
+Agreement with two annotators that are not the teacher — DeepSeek-V4.1-Flash above, GLM-5.3-Flash
+below — against throughput. Both were asked to annotate the same 300 held-out documents with
+propella's own prompt and schema.
 
 ## What it predicts
 
@@ -92,8 +91,8 @@ levels and their definitions are in the
 
 ## Training
 
-{title} was trained on propella-1-4b labels derived from the Dynaword corpora, FineWeb-2 and
-FinePDFs, covering {n_langs} languages and {n_train}. Training took {train_minutes} on one Quadro
+{title} was trained on propella-1-4b labels derived from the
+[Dynaword corpora](https://huggingface.co/papers/2508.02271), FineWeb-2 and FinePDFs, covering {n_langs} languages and {n_train}. Training took {train_minutes} on one Quadro
 RTX 8000 ({train_setup}), with a cross-entropy objective for the single-select properties, binary
 cross-entropy for the multi-select ones and a token-level F1 loss for PII. The annotations are
 published in [propella-bekko-data](https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data)
@@ -116,24 +115,83 @@ predicting the most frequent label — is 0.123.
 
 ## Usage
 
-```bash
-pip install git+https://github.com/danish-foundation-models/propella-bekko
-```
+The checkpoint is a `ModernBertModel` plus a projection and one linear head per property, so it loads
+with `transformers` and `torch` alone — no custom package, no `trust_remote_code`:
 
 ```python
+import json
+from pathlib import Path
+
+import torch
 from huggingface_hub import snapshot_download
-from propella_bekko.models import PropellaBekko
-from propella_bekko.inference import Annotator
+from safetensors.torch import load_file
+from torch import nn
+from transformers import AutoModel, AutoTokenizer
 
-path = snapshot_download("{repo_id}")
-model, tokenizer, cfg = PropellaBekko.load(path)
-annotator = Annotator(model, tokenizer, cfg["max_length"], cfg["tail_tokens"])
+path = Path(snapshot_download("{repo_id}"))
+cfg = json.loads((path / "config.json").read_text())
+state = load_file(str(path / "model.safetensors"))
 
+# the encoder, with the fine-tuned weights from the checkpoint
+backbone = AutoModel.from_pretrained(cfg["backbone"])
+backbone.load_state_dict(
+    {k.removeprefix("backbone.model."): v for k, v in state.items() if k.startswith("backbone.model.")}
+)
+hidden = cfg["head_hidden"]
+proj = nn.Sequential(nn.Dropout(0.1), nn.Linear(backbone.config.hidden_size + 3, hidden),
+                     nn.GELU(), nn.LayerNorm(hidden))
+proj.load_state_dict({k.removeprefix("proj."): v for k, v in state.items() if k.startswith("proj.")})
+heads = nn.ModuleDict({f["name"]: nn.Linear(hidden, len(f["labels"])) for f in cfg["fields"]})
+heads.load_state_dict({k.removeprefix("heads."): v for k, v in state.items() if k.startswith("heads.")})
+
+tokenizer = AutoTokenizer.from_pretrained(path / "tokenizer")
+max_length, tail = cfg["max_length"], cfg["tail_tokens"]
+
+
+def annotate(text: str) -> dict:
+    ids = tokenizer(text, add_special_tokens=False)["input_ids"]
+    budget = max_length - 2
+    cut = len(ids) > budget
+    if cut:
+        ids = ids[: budget - tail] + ids[-tail:]
+    input_ids = torch.tensor([[tokenizer.cls_token_id, *ids, tokenizer.sep_token_id]])
+    attention_mask = torch.ones_like(input_ids)
+
+    with torch.inference_mode():
+        hidden_state = backbone(input_ids, attention_mask).last_hidden_state
+        mask = attention_mask.unsqueeze(-1)
+        pooled = (hidden_state * mask).sum(1) / mask.sum(1)
+        # length features: the encoder cannot see the full document after truncation
+        features = torch.tensor([[
+            torch.log1p(torch.tensor(float(len(text)))) / 10,
+            torch.log1p(torch.tensor(float(len(text.split())))) / 10,
+            float(cut or "\n[...]\n" in text),
+        ]])
+        z = proj(torch.cat([pooled, features], -1))
+        logits = {name: head(z)[0] for name, head in heads.items()}
+
+    out = {}
+    for f in cfg["fields"]:
+        name, labels, lg = f["name"], f["labels"], logits[f["name"]]
+        if f["kind"] == "multi":
+            hot = lg.sigmoid() >= 0.5
+            hot[lg.argmax()] = True          # always at least one label
+            out[name] = [lab for lab, on in zip(labels, hot) if on]
+        elif f.get("ordinal"):
+            ranks = torch.arange(len(labels), dtype=torch.float)
+            out[name] = labels[int((lg.softmax(-1) * ranks).sum().round())]
+        else:
+            out[name] = labels[int(lg.argmax())]
+    return out
+
+
+# a 60,000-character Dutch government report, shortened here for the listing
 doc = "TECHNISCH EN ECONOMISCH POTENTIEEL VOOR EEN AARDGASVRIJE GEBOUWDE OMGEVING IN DE REGIO DRECHTSTEDEN ..."
-print(annotator.annotate([{"id": "pbl_282", "text": doc}])[0])
+print(annotate(doc))
 ```
 
-That document is a Dutch government report on making neighbourhoods gas-free, and the model answers:
+On the full document — a Dutch government report on making neighbourhoods gas-free — the model
+answers:
 
 ```python
 {
@@ -160,42 +218,21 @@ That document is a Dutch government report on making neighbourhoods gas-free, an
 Multi-select properties are decoded at a sigmoid threshold of 0.5. `thresholds.json` in this
 repository holds thresholds tuned for macro-F1 if you would rather have rare-label recall.
 
-## Limitations
+## Citation
 
-* It reproduces **propella-1-4b's judgement**, including its mistakes: it is a distillation of one
-  teacher's labels, not an independent reading of the document. Where the teacher is wrong
-  systematically, so is this model.
-* Agreement is measured against that teacher. A model can agree with propella-1-4b more closely
-  than DeepSeek does and still be the less accurate annotator of the underlying document.
-* Property values come from a fixed taxonomy; a document that does not fit the taxonomy gets the
-  closest available label rather than a new one.
-* Trained on documents of up to {max_length} tokens of head plus {tail_tokens} of tail; a document
-  longer than that is truncated, and length-dependent properties are conditioned on the length
-  features rather than on the full text.
-* Calibration is not trained: the per-property distributions are usable for ranking, but the
-  probabilities are not guaranteed to be calibrated against human judgement.
-
-## Licence and citation
-
-MIT for the model and the code.
-
-* Paper: [Dynaword: From One-shot to Continuously Developed Datasets](https://huggingface.co/papers/2508.02271)
-  ([arXiv:2508.02271](https://arxiv.org/abs/2508.02271))
-* Teacher: [propella-1-4b](https://huggingface.co/ellamind/propella-1-4b) ([arXiv:2602.12414](https://arxiv.org/abs/2602.12414))
-* Training data: [propella-bekko-data](https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data)
-* Code and experiments: [propella-bekko](https://github.com/danish-foundation-models/propella-bekko)
-
-If you use this model, please cite the paper and the project:
+The model and the code are MIT. If you use this model, please cite the
+[Dynaword paper](https://huggingface.co/papers/2508.02271) ([arXiv:2508.02271](https://arxiv.org/abs/2508.02271))
+and the project:
 
 ```
 @inproceedings{dynaword,
-	title = {Dynaword: {From} {One}-shot to {Continuously} {Developed} {Datasets}},
+	title = {Dynaword: {From} {One}-shot to {Continuously} {Developed} {Datasets},
 	booktitle = {Proceedings of the {Language} {Resources} and {Evaluation} {Conference} ({LREC} 2026)},
 	author = {Enevoldsen, Kenneth and Jensen, Kristian Nørgaard and Kostkan, Jan and Szabó, Balázs and Kardos, Márton and Vad, Kirsten and Núñez, Andrea Blasi and Barmina, Gianluca and Nielsen, Jacob and Larsen, Rasmus and Vahlstrup, Peter and Dalum, Per Møldrup and Elliott, Desmond and Galke, Lukas and Schneider-Kamp, Peter and Nielbo, Kristoffer},
 	year = {2026},
 }
 @misc{enevoldsenDanishFoundationModels2023,
-	title = {Danish {Foundation} {Models}},
+	title = {Danish {Foundation} {Models},
 	url = {http://arxiv.org/abs/2311.07264},
 	publisher = {arXiv},
 	author = {Enevoldsen, Kenneth and Hansen, Lasse and Nielsen, Dan S. and Egebæk, Rasmus A. F. and Holm, Søren V. and Nielsen, Martin C. and Bernstorff, Martin and Larsen, Rasmus and Jørgensen, Peter B. and Højmark-Bertelsen, Malte and Vahlstrup, Peter B. and Møldrup-Dalum, Per and Nielbo, Kristoffer},

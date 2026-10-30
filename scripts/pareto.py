@@ -65,11 +65,9 @@ def pareto_set(points: list[dict]) -> list[dict]:
     return sorted(frontier, key=lambda m: m["docs_per_s"])
 
 
-def render(path: Path) -> None:
-    payload = json.loads(path.read_text())
-    reference = payload["reference"]
+def draw(ax, payload: dict) -> None:
+    """Everything inside the axes: reference rules, frontier, points, labels, legend."""
     data = payload["models"]
-    ref_name = REFERENCE_NAME.get(reference, reference)
 
     points = {n: m for n, m in data.items() if m["family"] in ("student", "propella")}
     other_llm = {n: m for n, m in data.items() if m["family"] == "llm"}
@@ -77,9 +75,6 @@ def render(path: Path) -> None:
     frontier = pareto_set(list(points.values()))
     on_frontier = {m["docs_per_s"] for m in frontier}
 
-    fig = plt.figure(figsize=(9.0, 5.2), dpi=200)
-    fig.patch.set_facecolor(BG)
-    ax = fig.add_axes((0.085, 0.13, 0.895, 0.84))
     ax.set_facecolor(BG)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
@@ -213,43 +208,115 @@ def render(path: Path) -> None:
     for text in leg.get_texts():
         text.set_color(FG)
 
-    ax.set_xlabel("documents per second", color=FG, fontsize=10.5, labelpad=8)
-    ax.set_ylabel("Annotation Quality (macro-F1)", color=FG, fontsize=10.5, labelpad=30)
+    return handles
 
-    # Subtitles: what the two axes measure and on what hardware.
+
+def axis_titles(ax, reference: str, x_sub: bool = True) -> None:
+    """FT-style axis titles: the main label, with its subtitle beneath it on the same axis."""
     ax.text(
-        0.5,
-        -0.145,
-        "on one Quadro RTX 8000",
+        -0.135,
+        0.68,
+        "Annotation Quality (macro-F1)",
         transform=ax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=8.5,
-        color=MUTED,
-    )
-    ax.text(
-        -0.17,
-        0.5,
-        f"Agreement with {REFERENCE_NAME.get(reference, reference)}",
-        transform=ax.transAxes,
+        rotation=90,
         ha="center",
         va="center",
+        fontsize=10.5,
+        color=FG,
+    )
+    ax.text(
+        -0.135,
+        0.235,
+        f"Agreement with {REFERENCE_NAME.get(reference, reference)}",
+        transform=ax.transAxes,
         rotation=90,
+        ha="center",
+        va="center",
         fontsize=8.5,
         color=MUTED,
     )
+    if x_sub:
+        ax.text(
+            0.5,
+            -0.155,
+            "documents per second",
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            fontsize=10.5,
+            color=FG,
+        )
+        ax.text(
+            0.5,
+            -0.245,
+            "on one Quadro RTX 8000",
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            fontsize=8.5,
+            color=MUTED,
+        )
+
+
+def legend(ax, handles, loc: str = "lower right") -> None:
+    leg = ax.legend(
+        handles=handles,
+        loc=loc,
+        frameon=False,
+        fontsize=9,
+        handletextpad=0.6,
+        borderaxespad=1.0,
+    )
+    for text in leg.get_texts():
+        text.set_color(FG)
+
+
+def render(path: Path) -> None:
+    payload = json.loads(path.read_text())
+    reference = payload["reference"]
+
+    fig = plt.figure(figsize=(9.0, 5.2), dpi=200)
+    fig.patch.set_facecolor(BG)
+    ax = fig.add_axes((0.085, 0.13, 0.895, 0.84))
+    handles = draw(ax, payload)
+    legend(ax, handles)
+    axis_titles(ax, reference)
 
     for ext in ("svg", "png"):
         out = Path("docs/assets") / f"pareto_{reference}.{ext}"
-        fig.savefig(out, facecolor=BG, bbox_inches="tight", pad_inches=0.15)
+        fig.savefig(out, facecolor=BG, bbox_inches="tight", pad_inches=0.2)
+        print("wrote", out)
+    plt.close(fig)
+
+
+def render_combined(paths: list[Path]) -> None:
+    """One narrow figure, one panel per reference annotator, sharing the throughput axis."""
+    payloads = [json.loads(p.read_text()) for p in paths]
+    fig, axes = plt.subplots(
+        len(payloads), 1, figsize=(5.4, 3.4 * len(payloads) + 0.9), dpi=200, sharex=True
+    )
+    fig.patch.set_facecolor(BG)
+    fig.subplots_adjust(hspace=0.22, left=0.20, right=0.97, top=0.97, bottom=0.10)
+    for i, (ax, payload) in enumerate(zip(axes, payloads, strict=False)):
+        handles = draw(ax, payload)
+        legend(ax, handles, loc="upper right")
+        axis_titles(ax, payload["reference"], x_sub=i == len(payloads) - 1)
+        if i < len(payloads) - 1:
+            ax.tick_params(labelbottom=False)
+
+    for ext in ("svg", "png"):
+        out = Path("docs/assets") / f"pareto_combined.{ext}"
+        fig.savefig(out, facecolor=BG, bbox_inches="tight", pad_inches=0.2)
         print("wrote", out)
     plt.close(fig)
 
 
 def main() -> None:
     Path("docs/assets").mkdir(parents=True, exist_ok=True)
-    for path in sorted(Path("runs").glob("pareto_vs_*.json")):
+    paths = sorted(Path("runs").glob("pareto_vs_*.json"))
+    for path in paths:
         render(path)
+    render_combined(paths)
 
 
 if __name__ == "__main__":
