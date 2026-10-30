@@ -44,7 +44,7 @@ whole corpora: the same label space, predicted in one forward pass, without gene
 {params} parameters and annotates {docs_per_s} documents per second on one Quadro RTX 8000.
 
 <p align="center">
-  <img src="pareto_combined.svg" width="480" alt="annotation quality against throughput, against two independent annotators" />
+  <img src="pareto_combined.svg" width="780" alt="annotation quality against throughput, against two independent annotators" />
 </p>
 
 Agreement with two annotators that are not the teacher — DeepSeek-V4.1-Flash above, GLM-5.3-Flash
@@ -115,8 +115,7 @@ predicting the most frequent label — is 0.123.
 
 ## Usage
 
-The checkpoint is a `ModernBertModel` plus a projection and one linear head per property, so it loads
-with `transformers` and `torch` alone — no custom package, no `trust_remote_code`:
+To use the model simply run:
 
 ```python
 import json
@@ -239,3 +238,12 @@ and the project:
 	year = {2023},
 }
 ```
+
+---
+
+<h3 style="display: flex; align-items: center;">
+  <a href="https://www.foundationmodels.dk">
+    <img src="./docs/icon.png" width="30" style="margin-right: 10px;" />
+  </a>
+  A&nbsp;<a href=https://www.foundationmodels.dk>Danish Foundation Models</a>&nbsp;model
+</h3>

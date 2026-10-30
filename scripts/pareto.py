@@ -200,28 +200,36 @@ def draw(ax, payload: dict) -> None:
     return handles
 
 
-def axis_titles(ax, reference: str, x_sub: bool = True) -> None:
+def axis_titles(
+    ax,
+    reference: str,
+    x_sub: bool = True,
+    main_y: float = 0.72,
+    sub_y: float = 0.20,
+    main_fs: float = 10.5,
+    sub_fs: float = 8.5,
+) -> None:
     """FT-style axis titles: the main label, with its subtitle beneath it on the same axis."""
     ax.text(
         -0.105,
-        0.72,
+        main_y,
         "Annotation Quality (macro-F1)",
         transform=ax.transAxes,
         rotation=90,
         ha="center",
         va="center",
-        fontsize=10.5,
+        fontsize=main_fs,
         color=FG,
     )
     ax.text(
         -0.105,
-        0.20,
+        sub_y,
         f"Agreement with {REFERENCE_NAME.get(reference, reference)}",
         transform=ax.transAxes,
         rotation=90,
         ha="center",
         va="center",
-        fontsize=8.5,
+        fontsize=sub_fs,
         color=MUTED,
     )
     if x_sub:
@@ -280,25 +288,36 @@ def render(path: Path) -> None:
 
 
 def render_combined(paths: list[Path]) -> None:
-    """One narrow figure, one panel per reference annotator, sharing the throughput axis."""
+    """One figure, one panel per reference annotator, side by side."""
     payloads = [json.loads(p.read_text()) for p in paths]
-    fig, axes = plt.subplots(
-        len(payloads), 1, figsize=(5.4, 4.4 * len(payloads) + 1.1), dpi=200, sharex=True
-    )
+    fig, axes = plt.subplots(1, len(payloads), figsize=(9.6, 5.2), dpi=200, sharey=True)
     fig.patch.set_facecolor(BG)
-    fig.subplots_adjust(hspace=0.20, left=0.19, right=0.97, top=0.98, bottom=0.17)
+    fig.subplots_adjust(wspace=0.26, left=0.085, right=0.985, top=0.97, bottom=0.225)
     for i, (ax, payload) in enumerate(zip(axes, payloads, strict=False)):
         handles = draw(ax, payload)
-        axis_titles(ax, payload["reference"], x_sub=i == len(payloads) - 1)
-        if i < len(payloads) - 1:
-            ax.tick_params(labelbottom=False)
+        axis_titles(
+            ax,
+            payload["reference"],
+            x_sub=False,
+            main_y=0.70,
+            sub_y=0.14,
+            main_fs=9.5,
+            sub_fs=8.0,
+        )
+        if i:
+            ax.tick_params(labelleft=False)
 
-    # one shared legend under the panels: inside a panel it collides with the reference rule
+    fig.text(0.5, 0.125, "documents per second", ha="center", va="bottom", fontsize=10.5, color=FG)
+    fig.text(
+        0.5, 0.085, "on one Quadro RTX 8000", ha="center", va="bottom", fontsize=8.5, color=MUTED
+    )
+
+    # one shared legend at the bottom: inside a panel it collides with the reference rule
     shared = fig.legend(
         handles=handles,
         labels=[h.get_label() for h in handles],
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.005),
+        bbox_to_anchor=(0.5, 0.0),
         ncol=3,
         frameon=False,
         fontsize=9,
