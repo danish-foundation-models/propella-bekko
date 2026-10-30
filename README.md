@@ -57,7 +57,7 @@ properties, §5.2 of [the paper](https://arxiv.org/abs/2602.12414)) on **1,000 h
 documents**, against two references. Throughput is documents/second on one Quadro RTX 8000.
 
 <p align="center">
-  <img src="docs/assets/pareto.svg" alt="Pareto: overall annotation score vs throughput, two references" width="900">
+  <img src="docs/assets/pareto.svg" alt="Pareto: agreement with DeepSeek-V4.1-Flash annotations vs throughput" width="900">
 </p>
 
 | model | params | docs/s | vs stored propella-1-4b labels | vs DeepSeek-V4.1-Flash |
@@ -65,18 +65,19 @@ documents**, against two references. Throughput is documents/second on one Quadr
 | propella-1-4b (reference, re-run) | 4B | 0.22 | 0.875 | 0.737 |
 | propella-1-1.7b | 1.7B | 0.50 | 0.808 | 0.703 |
 | propella-1-0.6b | 0.6B | 0.50 | 0.763 | 0.679 |
-| **a25m-xl** | 118M | **186** | **0.811** | **0.708** |
-| a25m-v1-pool | 118M | 193 | 0.803 | 0.691 |
-| a8m-xl | 106M | 348 | 0.783 | 0.679 |
-| static-long-ctx8192 | 206M | 686 | 0.737 | 0.655 |
+| **a25m-xl-3ep** | 118M | **186** | **0.820** | **0.724** |
+| a8m-v1-pool | 106M | 376 | 0.779 | 0.694 |
+| static-v1-pool | 206M | 686 | 0.747 | 0.678 |
 
-* **`a25m-xl`** (25M active parameters, distilled from 845k documents) **matches or beats
-  propella-1-1.7b on both references** — 0.811 vs 0.808 against the stored propella labels and
-  0.708 vs 0.703 against the independent DeepSeek annotations — at ~370× the throughput.
-* It is far ahead of propella-1-0.6b (0.763 / 0.679). Against a *different* annotator the
-  absolute scores drop for every model, including propella-4b itself (0.875 → 0.737).
+* **`a25m-xl-3ep`** (25M active parameters, distilled from 845k documents) **beats
+  propella-1-1.7b on both references** — 0.820 vs 0.808 against the stored propella labels and
+  0.724 vs 0.703 against the independent DeepSeek annotations — at ~370× the throughput. It
+  lands 0.013 short of propella-4b on the independent reference at 845× the throughput.
+* Ordinal properties are decoded to the **expected level** of the predicted distribution
+  rather than by argmax, which is worth +0.013 mean QWK for free
+  ([`experiments/010`](experiments/010-gliclass-and-decision-models.md)).
 * The **static model** (no Transformer layers) is the cheapest useful point: 686 docs/s at
-  0.737, about 10% below a8m.
+  0.747, and `a8m` sits in between at 376 docs/s.
 
 Per-run details in [`experiments/`](experiments/). Tracked in the
 [tracking issue](../../issues?q=label%3Atracking).
