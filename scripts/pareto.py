@@ -76,10 +76,9 @@ def draw(ax, payload: dict) -> None:
     on_frontier = {m["docs_per_s"] for m in frontier}
 
     ax.set_facecolor(BG)
-    for side in ("top", "right"):
+    for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
-    for side in ("left", "bottom"):
-        ax.spines[side].set_color(GRID)
+    ax.spines["bottom"].set_color(GRID)
     ax.tick_params(colors=FG, labelsize=10, length=0)
     ax.grid(axis="y", color=GRID, linewidth=0.7)
     ax.set_axisbelow(True)
@@ -292,7 +291,7 @@ def render_combined(paths: list[Path]) -> None:
     payloads = [json.loads(p.read_text()) for p in paths]
     fig, axes = plt.subplots(1, len(payloads), figsize=(9.6, 5.2), dpi=200, sharey=True)
     fig.patch.set_facecolor(BG)
-    fig.subplots_adjust(wspace=0.26, left=0.085, right=0.985, top=0.97, bottom=0.225)
+    fig.subplots_adjust(wspace=0.42, left=0.085, right=0.985, top=0.97, bottom=0.225)
     for i, (ax, payload) in enumerate(zip(axes, payloads, strict=False)):
         handles = draw(ax, payload)
         axis_titles(
@@ -327,6 +326,21 @@ def render_combined(paths: list[Path]) -> None:
     for text in shared.get_texts():
         text.set_color(FG)
 
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for i, ax in enumerate(axes):
+        for other in axes:
+            if other is ax:
+                continue
+            box = other.get_window_extent(renderer)
+            for artist in ax.get_children():
+                if not hasattr(artist, "get_window_extent") or not hasattr(artist, "get_text"):
+                    continue
+                if not artist.get_text().strip():
+                    continue
+                b = artist.get_window_extent(renderer)
+                if b.width and b.overlaps(box):
+                    print(f"  overlap: {artist.get_text()!r} of panel {i} into another panel")
     for ext in ("svg", "png"):
         out = Path("docs/assets") / f"pareto_combined.{ext}"
         fig.savefig(out, facecolor=BG, bbox_inches="tight", pad_inches=0.2)
