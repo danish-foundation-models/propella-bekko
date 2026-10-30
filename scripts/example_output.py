@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 import torch
+
 from propella_bekko.inference import Annotator
 from propella_bekko.models import PropellaBekko
 
