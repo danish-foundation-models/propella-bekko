@@ -87,7 +87,7 @@ def main() -> None:
     wanted = {(r["source"], r["id"]) for r in rows}
     predictions = {name: load_predictions(stem) for name, stem in LLMS.items()}
 
-    for reference, stem in LLMS.items():
+    for reference in LLMS:
         ref = predictions[reference]
         if ref is None:
             print(f"skip reference {reference}: no per-field predictions")
