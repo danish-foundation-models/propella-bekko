@@ -204,15 +204,15 @@ def axis_titles(
     ax,
     reference: str,
     x_sub: bool = True,
-    main_y: float = 0.72,
-    sub_y: float = 0.20,
     main_fs: float = 10.5,
     sub_fs: float = 8.5,
+    main_x: float = -0.165,
+    sub_x: float = -0.10,
 ) -> None:
     """FT-style axis titles: the main label, with its subtitle beneath it on the same axis."""
     ax.text(
-        -0.105,
-        main_y,
+        main_x,
+        0.5,
         "Annotation Quality (macro-F1)",
         transform=ax.transAxes,
         rotation=90,
@@ -222,8 +222,8 @@ def axis_titles(
         color=FG,
     )
     ax.text(
-        -0.105,
-        sub_y,
+        sub_x,
+        0.5,
         f"Agreement with {REFERENCE_NAME.get(reference, reference)}",
         transform=ax.transAxes,
         rotation=90,
@@ -299,10 +299,10 @@ def render_combined(paths: list[Path]) -> None:
             ax,
             payload["reference"],
             x_sub=False,
-            main_y=0.70,
-            sub_y=0.14,
             main_fs=9.5,
             sub_fs=8.0,
+            main_x=-0.16,
+            sub_x=-0.095,
         )
         if i:
             ax.tick_params(labelleft=False)
