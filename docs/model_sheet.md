@@ -122,6 +122,29 @@ repository holds thresholds tuned for macro-F1 if you would rather have rare-lab
 
 ## Licence and citation
 
-MIT for the model and the code. The labels derive from propella-1-4b and the Dynaword corpora; cite
-[propella-1](https://arxiv.org/abs/2602.12414) and
-[propella-bekko](https://github.com/danish-foundation-models/propella-bekko) if you use it.
+MIT for the model and the code. The labels derive from propella-1-4b and the Dynaword corpora.
+
+* Training data and its datasheet:
+  [danish-foundation-models/propella-bekko-data](https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data)
+* Paper: [Dynaword: From One-shot to Continuously Developed Datasets](https://huggingface.co/papers/2508.02271)
+  ([arXiv:2508.02271](https://arxiv.org/abs/2508.02271))
+* Teacher: [propella-1-4b](https://huggingface.co/ellamind/propella-1-4b) ([arXiv:2602.12414](https://arxiv.org/abs/2602.12414))
+* Code and experiments: [propella-bekko](https://github.com/danish-foundation-models/propella-bekko)
+
+If you use this model, please cite the paper and the project:
+
+```
+@inproceedings{dynaword,
+	title = {Dynaword: {From} {One}-shot to {Continuously} {Developed} {Datasets}},
+	booktitle = {Proceedings of the {Language} {Resources} and {Evaluation} {Conference} ({LREC} 2026)},
+	author = {Enevoldsen, Kenneth and Jensen, Kristian Nørgaard and Kostkan, Jan and Szabó, Balázs and Kardos, Márton and Vad, Kirsten and Núñez, Andrea Blasi and Barmina, Gianluca and Nielsen, Jacob and Larsen, Rasmus and Vahlstrup, Peter and Dalum, Per Møldrup and Elliott, Desmond and Galke, Lukas and Schneider-Kamp, Peter and Nielbo, Kristoffer},
+	year = {2026},
+}
+@misc{enevoldsenDanishFoundationModels2023,
+	title = {Danish {Foundation} {Models}},
+	url = {http://arxiv.org/abs/2311.07264},
+	publisher = {arXiv},
+	author = {Enevoldsen, Kenneth and Hansen, Lasse and Nielsen, Dan S. and Egebæk, Rasmus A. F. and Holm, Søren V. and Nielsen, Martin C. and Bernstorff, Martin and Larsen, Rasmus and Jørgensen, Peter B. and Højmark-Bertelsen, Malte and Vahlstrup, Peter B. and Møldrup-Dalum, Per and Nielbo, Kristoffer},
+	year = {2023},
+}
+```
