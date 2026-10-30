@@ -43,6 +43,23 @@ TIERS = {
 }
 
 
+# Students that were graded against the same two reference annotators (300 docs, macro-F1),
+# with throughput on one Quadro RTX 8000. The row for the model being published is bolded.
+STUDENTS = {
+    "propella-bekko-a25m": ("123M", "186", "0.523", "0.522"),
+    "propella-bekko-a8m": ("106M", "348", "0.489", "0.479"),
+    "propella-bekko-static": ("206M", "686", "0.479", "0.468"),
+}
+
+
+def student_rows(repo_name: str) -> str:
+    rows = []
+    for name, (params, docs_per_s, ds, glm) in STUDENTS.items():
+        label = f"**{name}**" if name == repo_name else name
+        rows.append(f"| {label} | {params} | {docs_per_s} | {ds} | {glm} |")
+    return "\n".join(rows)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("run")
@@ -53,6 +70,7 @@ def main() -> None:
     ap.add_argument("--mf1-deepseek", required=True)
     ap.add_argument("--mf1-glm", required=True)
     ap.add_argument("--n-train", default="the training pool (403k documents)")
+    ap.add_argument("--n-langs", default="20")
     ap.add_argument("--train-minutes", help="override when the run kept no results.json")
     a = ap.parse_args()
 
@@ -100,6 +118,9 @@ def main() -> None:
         "tail_tokens": tail_tokens,
         "train_setup": train_setup,
         "n_train": a.n_train,
+        "n_langs": a.n_langs,
+        "title": a.repo_name[:1].upper() + a.repo_name[1:],
+        "student_rows": student_rows(a.repo_name),
         "train_minutes": minutes,
         "overall": a.overall,
         "docs_per_s": a.docs_per_s,

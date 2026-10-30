@@ -213,17 +213,35 @@ def render(path: Path) -> None:
     for text in leg.get_texts():
         text.set_color(FG)
 
-    ax.set_xlabel(
-        "documents per second on one Quadro RTX 8000, log scale  →  faster",
-        color=FG,
-        fontsize=10.5,
-        labelpad=10,
+    ax.set_xlabel("documents per second", color=FG, fontsize=10.5, labelpad=8)
+    ax.set_ylabel("Annotation Quality (macro-F1)", color=FG, fontsize=10.5, labelpad=30)
+
+    # Subtitles: what the two axes measure and on what hardware.
+    ax.text(
+        0.5,
+        -0.145,
+        "on one Quadro RTX 8000",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=8.5,
+        color=MUTED,
     )
-    ax.set_ylabel(f"agreement with {ref_name} (macro-F1)", color=FG, fontsize=10.5, labelpad=10)
+    ax.text(
+        -0.17,
+        0.5,
+        f"Agreement with {REFERENCE_NAME.get(reference, reference)}",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        rotation=90,
+        fontsize=8.5,
+        color=MUTED,
+    )
 
     for ext in ("svg", "png"):
         out = Path("docs/assets") / f"pareto_{reference}.{ext}"
-        fig.savefig(out, facecolor=BG)
+        fig.savefig(out, facecolor=BG, bbox_inches="tight", pad_inches=0.15)
         print("wrote", out)
     plt.close(fig)
 
