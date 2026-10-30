@@ -197,25 +197,14 @@ def draw(ax, payload: dict) -> None:
         ),
         plt.Line2D([], [], color=FRONTIER, linewidth=1.3, alpha=0.55, label="Pareto frontier"),
     ]
-    leg = ax.legend(
-        handles=handles,
-        loc="lower right",
-        frameon=False,
-        fontsize=9,
-        handletextpad=0.6,
-        borderaxespad=1.0,
-    )
-    for text in leg.get_texts():
-        text.set_color(FG)
-
     return handles
 
 
 def axis_titles(ax, reference: str, x_sub: bool = True) -> None:
     """FT-style axis titles: the main label, with its subtitle beneath it on the same axis."""
     ax.text(
-        -0.135,
-        0.68,
+        -0.105,
+        0.72,
         "Annotation Quality (macro-F1)",
         transform=ax.transAxes,
         rotation=90,
@@ -225,8 +214,8 @@ def axis_titles(ax, reference: str, x_sub: bool = True) -> None:
         color=FG,
     )
     ax.text(
-        -0.135,
-        0.235,
+        -0.105,
+        0.20,
         f"Agreement with {REFERENCE_NAME.get(reference, reference)}",
         transform=ax.transAxes,
         rotation=90,
@@ -259,6 +248,7 @@ def axis_titles(ax, reference: str, x_sub: bool = True) -> None:
 
 
 def legend(ax, handles, loc: str = "lower right") -> None:
+    """Legend inside one axes (the single-panel figures)."""
     leg = ax.legend(
         handles=handles,
         loc=loc,
@@ -293,16 +283,30 @@ def render_combined(paths: list[Path]) -> None:
     """One narrow figure, one panel per reference annotator, sharing the throughput axis."""
     payloads = [json.loads(p.read_text()) for p in paths]
     fig, axes = plt.subplots(
-        len(payloads), 1, figsize=(5.4, 3.4 * len(payloads) + 0.9), dpi=200, sharex=True
+        len(payloads), 1, figsize=(5.4, 4.4 * len(payloads) + 1.1), dpi=200, sharex=True
     )
     fig.patch.set_facecolor(BG)
-    fig.subplots_adjust(hspace=0.22, left=0.20, right=0.97, top=0.97, bottom=0.10)
+    fig.subplots_adjust(hspace=0.20, left=0.19, right=0.97, top=0.98, bottom=0.17)
     for i, (ax, payload) in enumerate(zip(axes, payloads, strict=False)):
         handles = draw(ax, payload)
-        legend(ax, handles, loc="upper right")
         axis_titles(ax, payload["reference"], x_sub=i == len(payloads) - 1)
         if i < len(payloads) - 1:
             ax.tick_params(labelbottom=False)
+
+    # one shared legend under the panels: inside a panel it collides with the reference rule
+    shared = fig.legend(
+        handles=handles,
+        labels=[h.get_label() for h in handles],
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.005),
+        ncol=3,
+        frameon=False,
+        fontsize=9,
+        handletextpad=0.6,
+        columnspacing=1.6,
+    )
+    for text in shared.get_texts():
+        text.set_color(FG)
 
     for ext in ("svg", "png"):
         out = Path("docs/assets") / f"pareto_combined.{ext}"
