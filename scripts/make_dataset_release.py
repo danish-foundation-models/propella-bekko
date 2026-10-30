@@ -1,14 +1,17 @@
 """Assemble the released distillation dataset (train / test-deepseek / test-*).
 
-Text-free by design: rows keep the corpus coordinates (`source`, `subset`, `lang`,
-`domain`, `id`) and a normalised `text_sha1`, so the text can be re-joined from the
-public source corpora, but no document text is redistributed.
+Public release: rows carry the document text as the annotators saw it (up to 50,000
+characters of head plus 10,000 of tail), alongside the corpus coordinates, a
+normalised `text_sha1` of the full text and the full-document lengths.
 
     uv run python scripts/make_dataset_release.py --out ../propella-bekko-dataset
 
+The training pool is streamed batch by batch and written shard by shard, so the
+whole pool is never held in memory.
+
 Columns, identical in every split so one loader works for all of them:
 
-    source, subset, lang, domain, id, text_sha1, n_chars, n_words,
+    source, subset, lang, domain, id, text, text_sha1, n_chars, n_words,
     <17 propella-1-4b properties>, one_sentence_description,
     reference_annotator, ref_<17 properties>, ref_one_sentence_description
 
@@ -27,7 +30,7 @@ import pyarrow.parquet as pq
 
 from propella_bekko.schema import FIELD_NAMES
 
-BASE = ["source", "subset", "lang", "domain", "id", "text_sha1", "n_chars", "n_words"]
+BASE = ["source", "subset", "lang", "domain", "id", "text", "text_sha1", "n_chars", "n_words"]
 TEACHER = [*FIELD_NAMES, "one_sentence_description"]
 MULTI = {
     "content_type",
@@ -53,15 +56,17 @@ SPLITS = {
 }
 
 TRAIN_SHARDS = 9
+BATCH = 20_000
 
 
-def column_schema() -> list[tuple[str, pa.DataType]]:
+def column_schema() -> pa.Schema:
     out: list[tuple[str, pa.DataType]] = [
         ("source", pa.string()),
         ("subset", pa.string()),
         ("lang", pa.string()),
         ("domain", pa.string()),
         ("id", pa.string()),
+        ("text", pa.large_string()),
         ("text_sha1", pa.string()),
         ("n_chars", pa.int64()),
         ("n_words", pa.int64()),
@@ -71,11 +76,7 @@ def column_schema() -> list[tuple[str, pa.DataType]]:
     out.append(("reference_annotator", pa.string()))
     for c in TEACHER:
         out.append((f"ref_{c}", pa.list_(pa.string()) if c in MULTI else pa.string()))
-    return out
-
-
-def load_docs(path: str) -> pa.Table:
-    return pq.read_table(path, columns=[*BASE, *TEACHER])
+    return pa.schema(out)
 
 
 def build(docs: pa.Table, ref: pa.Table | None, model: str | None) -> pa.Table:
@@ -87,8 +88,46 @@ def build(docs: pa.Table, ref: pa.Table | None, model: str | None) -> pa.Table:
             cols[f"ref_{c}"] = pa.chunked_array([pa.nulls(n, cols[c].type)])
         else:
             cols[f"ref_{c}"] = ref.column(c)
-    schema = pa.schema(column_schema())
+    schema = column_schema()
     return pa.table([cols[f.name] for f in schema], schema=schema)
+
+
+def write_train(docs_path: str, data_dir: Path, shards: int) -> tuple[int, dict[str, int]]:
+    """Stream the pool in batches and write fixed-size shards."""
+    handle = pq.ParquetFile(docs_path)
+    shard_rows = -(-handle.metadata.num_rows // shards)
+    buffer: list[pa.Table] = []
+    buffered = 0
+    written = 0
+    total = 0
+    nulls: dict[str, int] = {c: 0 for c in TEACHER}
+
+    def flush(force: bool) -> None:
+        nonlocal buffer, buffered, written
+        if not buffer:
+            return
+        held = pa.concat_tables(buffer)
+        while held.num_rows >= shard_rows or (force and held.num_rows):
+            chunk = held.slice(0, shard_rows) if not force else held
+            pq.write_table(chunk, data_dir / f"train-{written:05d}.parquet", compression="zstd")
+            print(f"  wrote train-{written:05d}.parquet {chunk.num_rows} rows")
+            written += 1
+            held = held.slice(chunk.num_rows)
+        buffer = [held] if held.num_rows else []
+        buffered = held.num_rows
+
+    for batch in handle.iter_batches(batch_size=BATCH, columns=[*BASE, *TEACHER]):
+        table = build(batch, None, None)
+        total += table.num_rows
+        for c in TEACHER:
+            nulls[c] += table.column(c).null_count
+        buffer.append(table)
+        buffered += table.num_rows
+        if buffered >= shard_rows:
+            flush(force=False)
+    flush(force=True)
+    print(f"  train: {total} rows in {written} shards")
+    return total, nulls
 
 
 def join_reference(docs: pa.Table, ref_path: str, model: str, split: str) -> pa.Table:
@@ -121,20 +160,12 @@ def main() -> None:
 
     for split, (docs_path, ref_path, model) in SPLITS.items():
         print(f"{split}: {docs_path}")
-        docs = load_docs(docs_path)
-        table = (
-            join_reference(docs, ref_path, model, split) if ref_path else build(docs, None, None)
-        )
         if split == "train":
-            missing = {c: int(table.column(c).null_count) for c in TEACHER}
-            step = -(-table.num_rows // a.train_shards)
-            for i in range(a.train_shards):
-                chunk = table.slice(i * step, step)
-                if chunk.num_rows:
-                    pq.write_table(chunk, data_dir / f"train-{i:05d}.parquet")
-                    print(f"  wrote train-{i:05d}.parquet {chunk.num_rows} rows")
-        else:
-            pq.write_table(table, data_dir / f"{split}.parquet")
+            summary[split], missing = write_train(docs_path, data_dir, a.train_shards)
+            continue
+        docs = pq.read_table(docs_path, columns=[*BASE, *TEACHER])
+        table = join_reference(docs, ref_path, model, split)
+        pq.write_table(table, data_dir / f"{split}.parquet", compression="zstd")
         summary[split] = table.num_rows
 
     (Path(a.out) / "stats.json").write_text(

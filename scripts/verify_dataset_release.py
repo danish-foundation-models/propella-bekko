@@ -17,7 +17,7 @@ PROPS = [
 ]  # fmt: skip
 
 d = ds.dataset(f"{REPO}/data", format="parquet")
-common = ["source", "subset", "lang", "domain", "id", "text_sha1", "n_chars", *PROPS]
+common = ["source", "subset", "lang", "domain", "id", "text", "text_sha1", "n_chars", *PROPS]
 
 splits = {
     "train": d.to_table(columns=common, filter=ds.field("reference_annotator").is_null()),
@@ -31,6 +31,10 @@ for name, t in splits.items():
     print("  sources:", dict(Counter(t.column("source").to_pylist())))
     print("  languages:", len(set(t.column("lang").to_pylist())))
     print("  domains:", dict(Counter(t.column("domain").to_pylist()).most_common()))
+    texts = t.column("text").to_pylist()
+    print(
+        f"  text: {sum(1 for x in texts if not x)} empty, max length {max(len(x) for x in texts)}"
+    )
     vals = t.column("n_chars").to_pylist()
     print(f"  n_chars median {statistics.median(vals):.0f} mean {sum(vals) / len(vals):.0f}")
 
