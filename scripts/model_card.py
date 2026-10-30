@@ -66,7 +66,9 @@ def main() -> None:
     ap.add_argument("repo_name")
     ap.add_argument("--tier", required=True, choices=list(TIERS))
     ap.add_argument("--docs-per-s", required=True)
-    ap.add_argument("--overall", required=True)
+    ap.add_argument(
+        "--overall", default=None, help="kept for older cards; the sheet no longer uses it"
+    )
     ap.add_argument("--mf1-deepseek", required=True)
     ap.add_argument("--mf1-glm", required=True)
     ap.add_argument("--n-train", default="the training pool (403k documents)")
@@ -96,6 +98,49 @@ def main() -> None:
         else tier["tail_tokens"]
     )
 
+    kind = (model_cfg.get("backbone_spec") or {}).get("kind", "hf")
+    if kind == "hf":
+        encoder_block = """# the encoder, with the fine-tuned weights from the checkpoint
+backbone = AutoModel.from_pretrained(cfg["backbone"])
+backbone.load_state_dict(
+    {k.removeprefix("backbone.model."): v for k, v in state.items() if k.startswith("backbone.model.")}
+)
+
+
+def pool_text(input_ids, attention_mask):
+    hidden = backbone(input_ids, attention_mask).last_hidden_state
+    mask = attention_mask.unsqueeze(-1)
+    return (hidden * mask).sum(1) / mask.sum(1)
+
+
+dim = backbone.config.hidden_size"""
+    else:
+        encoder_block = """# the encoder: static token embeddings, mean-pooled. No Transformer layers.
+spec = cfg["backbone_spec"]
+emb = nn.EmbeddingBag(spec["num_embeddings"], spec["dim"], mode="mean", padding_idx=spec["pad_id"])
+emb.weight.data.copy_(state["backbone.emb.weight"])
+
+
+def pool_text(input_ids, attention_mask):
+    return emb(input_ids.masked_fill(attention_mask == 0, spec["pad_id"]))
+
+
+dim = spec["dim"]"""
+
+    example_file = run / "example_output.json"
+    if example_file.exists():
+        example = json.loads(example_file.read_text())["output"]
+        example_output = json.dumps(example, indent=4, ensure_ascii=False)
+    else:
+        example_output = "{}  # not recorded for this run"
+
+    thresholds_note = (
+        " `thresholds.json` in this repository holds thresholds tuned for macro-F1"
+        " if you would rather have rare-label recall."
+        if (run / "thresholds.json").exists()
+        else ""
+    )
+
     train_cfg_path = run / "train_config.json"
     train_cfg = json.loads(train_cfg_path.read_text()) if train_cfg_path.exists() else {}
     epochs = train_cfg.get("epochs")
@@ -122,7 +167,9 @@ def main() -> None:
         "title": a.repo_name[:1].upper() + a.repo_name[1:],
         "student_rows": student_rows(a.repo_name),
         "train_minutes": minutes,
-        "overall": a.overall,
+        "thresholds_note": thresholds_note,
+        "encoder_block": encoder_block,
+        "example_output": example_output,
         "docs_per_s": a.docs_per_s,
         "mf1_deepseek": a.mf1_deepseek,
         "mf1_glm": a.mf1_glm,

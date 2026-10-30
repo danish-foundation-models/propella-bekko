@@ -47,8 +47,8 @@ whole corpora: the same label space, predicted in one forward pass, without gene
   <img src="pareto_combined.svg" width="780" alt="annotation quality against throughput, against two independent annotators" />
 </p>
 
-Agreement with two annotators that are not the teacher — DeepSeek-V4.1-Flash above, GLM-5.3-Flash
-below — against throughput. Both were asked to annotate the same 300 held-out documents with
+Agreement with two annotators that are not the teacher — DeepSeek-V4.1-Flash on the left,
+GLM-5.3-Flash on the right — against throughput. Both were asked to annotate the same 300 held-out documents with
 propella's own prompt and schema.
 
 ## What it predicts
@@ -131,13 +131,9 @@ path = Path(snapshot_download("{repo_id}"))
 cfg = json.loads((path / "config.json").read_text())
 state = load_file(str(path / "model.safetensors"))
 
-# the encoder, with the fine-tuned weights from the checkpoint
-backbone = AutoModel.from_pretrained(cfg["backbone"])
-backbone.load_state_dict(
-    {k.removeprefix("backbone.model."): v for k, v in state.items() if k.startswith("backbone.model.")}
-)
+{encoder_block}
 hidden = cfg["head_hidden"]
-proj = nn.Sequential(nn.Dropout(0.1), nn.Linear(backbone.config.hidden_size + 3, hidden),
+proj = nn.Sequential(nn.Dropout(0.1), nn.Linear(dim + 3, hidden),
                      nn.GELU(), nn.LayerNorm(hidden))
 proj.load_state_dict({k.removeprefix("proj."): v for k, v in state.items() if k.startswith("proj.")})
 heads = nn.ModuleDict({f["name"]: nn.Linear(hidden, len(f["labels"])) for f in cfg["fields"]})
@@ -157,9 +153,7 @@ def annotate(text: str) -> dict:
     attention_mask = torch.ones_like(input_ids)
 
     with torch.inference_mode():
-        hidden_state = backbone(input_ids, attention_mask).last_hidden_state
-        mask = attention_mask.unsqueeze(-1)
-        pooled = (hidden_state * mask).sum(1) / mask.sum(1)
+        pooled = pool_text(input_ids, attention_mask)
         # length features: the encoder cannot see the full document after truncation
         features = torch.tensor([[
             torch.log1p(torch.tensor(float(len(text)))) / 10,
@@ -193,29 +187,10 @@ On the full document — a Dutch government report on making neighbourhoods gas-
 answers:
 
 ```python
-{
-    "content_integrity": "complete",
-    "content_ratio": "complete_content",
-    "content_length": "substantial",
-    "content_type": ["analytical", "technical_documentation"],
-    "business_sector": ["government_public", "energy_utilities", "environmental_services"],
-    "technical_content": ["scientific", "data_heavy"],
-    "content_quality": "excellent",
-    "information_density": "dense",
-    "educational_value": "moderate",
-    "reasoning_indicators": "analytical",
-    "audience_level": "expert",
-    "commercial_bias": "none",
-    "time_sensitivity": "slowly_changing",
-    "content_safety": "safe",
-    "pii_presence": "no_pii",
-    "regional_relevance": ["european"],
-    "country_relevance": ["netherlands"],
-}
+{example_output}
 ```
 
-Multi-select properties are decoded at a sigmoid threshold of 0.5. `thresholds.json` in this
-repository holds thresholds tuned for macro-F1 if you would rather have rare-label recall.
+Multi-select properties are decoded at a sigmoid threshold of 0.5.{thresholds_note}
 
 ## Citation
 
@@ -225,13 +200,13 @@ and the project:
 
 ```
 @inproceedings{dynaword,
-	title = {Dynaword: {From} {One}-shot to {Continuously} {Developed} {Datasets},
+	title = {Dynaword: {From} {One}-shot to {Continuously} {Developed} {Datasets}},
 	booktitle = {Proceedings of the {Language} {Resources} and {Evaluation} {Conference} ({LREC} 2026)},
 	author = {Enevoldsen, Kenneth and Jensen, Kristian Nørgaard and Kostkan, Jan and Szabó, Balázs and Kardos, Márton and Vad, Kirsten and Núñez, Andrea Blasi and Barmina, Gianluca and Nielsen, Jacob and Larsen, Rasmus and Vahlstrup, Peter and Dalum, Per Møldrup and Elliott, Desmond and Galke, Lukas and Schneider-Kamp, Peter and Nielbo, Kristoffer},
 	year = {2026},
 }
 @misc{enevoldsenDanishFoundationModels2023,
-	title = {Danish {Foundation} {Models},
+	title = {Danish {Foundation} {Models}},
 	url = {http://arxiv.org/abs/2311.07264},
 	publisher = {arXiv},
 	author = {Enevoldsen, Kenneth and Hansen, Lasse and Nielsen, Dan S. and Egebæk, Rasmus A. F. and Holm, Søren V. and Nielsen, Martin C. and Bernstorff, Martin and Larsen, Rasmus and Jørgensen, Peter B. and Højmark-Bertelsen, Malte and Vahlstrup, Peter B. and Møldrup-Dalum, Per and Nielbo, Kristoffer},
