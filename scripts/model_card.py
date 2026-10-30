@@ -64,22 +64,55 @@ def main() -> None:
         minutes = f"{a.train_minutes} minutes" if a.train_minutes else "not recorded"
     tier = TIERS[a.tier]
 
-    card = SHEET.read_text().format(
-        repo_name=a.repo_name,
-        repo_id=f"danish-foundation-models/{a.repo_name}",
-        tier=a.tier,
-        tier_desc=tier["desc"],
-        backbone=tier["backbone"],
-        params=tier["params"],
-        max_length=tier["max_length"],
-        tail_tokens=tier["tail_tokens"],
-        n_train=a.n_train,
-        train_minutes=minutes,
-        overall=a.overall,
-        docs_per_s=a.docs_per_s,
-        mf1_deepseek=a.mf1_deepseek,
-        mf1_glm=a.mf1_glm,
+    # Prefer what the run actually used over the tier defaults.
+    model_cfg_path = run / "model" / "config.json"
+    model_cfg = json.loads(model_cfg_path.read_text()) if model_cfg_path.exists() else {}
+    max_length = (
+        f"{model_cfg.get('max_length', tier['max_length']):,}"
+        if isinstance(model_cfg.get("max_length"), int)
+        else tier["max_length"]
     )
+    tail_tokens = (
+        f"{model_cfg.get('tail_tokens', tier['tail_tokens']):,}"
+        if isinstance(model_cfg.get("tail_tokens"), int)
+        else tier["tail_tokens"]
+    )
+
+    train_cfg_path = run / "train_config.json"
+    train_cfg = json.loads(train_cfg_path.read_text()) if train_cfg_path.exists() else {}
+    epochs = train_cfg.get("epochs")
+    tokens = train_cfg.get("max_tokens_per_batch")
+    if epochs and tokens:
+        train_setup = f"{epochs} epochs, {tokens:,} tokens per batch"
+    elif epochs:
+        train_setup = f"{epochs} epochs"
+    else:
+        train_setup = "training setup not recorded"
+
+    fields = {
+        "repo_name": a.repo_name,
+        "repo_id": f"danish-foundation-models/{a.repo_name}",
+        "tier": a.tier,
+        "tier_desc": tier["desc"],
+        "backbone": tier["backbone"],
+        "params": tier["params"],
+        "max_length": max_length,
+        "tail_tokens": tail_tokens,
+        "train_setup": train_setup,
+        "n_train": a.n_train,
+        "train_minutes": minutes,
+        "overall": a.overall,
+        "docs_per_s": a.docs_per_s,
+        "mf1_deepseek": a.mf1_deepseek,
+        "mf1_glm": a.mf1_glm,
+    }
+    # Plain replacement rather than str.format: the sheet quotes bibtex, whose braces
+    # would otherwise have to be escaped.
+    card = SHEET.read_text()
+    for key, value in fields.items():
+        card = card.replace("{" + key + "}", str(value))
+    leftover = [k for k in fields if "{" + k + "}" in card]
+    assert not leftover, f"unfilled placeholders: {leftover}"
 
     out = run / "MODEL_CARD.md"
     out.write_text(card)

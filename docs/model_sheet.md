@@ -63,7 +63,7 @@ Seventeen properties, one head each:
 
 * Annotations: propella-1-4b labels joined to the Dynaword corpora, FineWeb-2 and FinePDFs.
 * Documents: {n_train}
-* Time: {train_minutes} on one Quadro RTX 8000 (3 epochs, batch 32).
+* Time: {train_minutes} on one Quadro RTX 8000 ({train_setup}).
 * Objective: cross-entropy for single-select, binary cross-entropy for multi-select, token-level
   F1 loss for PII. No distillation loss beyond the labels themselves — the labels *are* the
   distillation.
@@ -89,6 +89,10 @@ re-run scores 0.875 on its own labels, propella-1-1.7b 0.808 and propella-1-0.6b
 
 ## Usage
 
+```bash
+pip install git+https://github.com/danish-foundation-models/propella-bekko
+```
+
 ```python
 from huggingface_hub import snapshot_download
 from propella_bekko.models import PropellaBekko
@@ -98,7 +102,7 @@ path = snapshot_download("{repo_id}")
 model, tokenizer, cfg = PropellaBekko.load(path)
 annotator = Annotator(model, tokenizer, cfg["max_length"], cfg["tail_tokens"])
 
-rows = [{{"id": "doc1", "text": "..."}}]
+rows = [{"id": "doc1", "text": "..."}]
 print(annotator.annotate(rows))
 ```
 
