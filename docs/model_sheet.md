@@ -76,7 +76,6 @@ levels and their definitions are in the
 | | `pii_presence` | binary | contains personally identifiable information |
 | Geography | `regional_relevance` | multi-label, 14 | primary regional and cultural context |
 | | `country_relevance` | multi-label, 749 | specific country relevance |
-| Not predicted | `one_sentence_description` | free text | a neutral one-sentence summary, which a classifier cannot produce |
 
 ## Architecture
 
