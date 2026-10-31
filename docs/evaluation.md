@@ -28,4 +28,8 @@ source, language and domain.
 ## Throughput
 
 `propella-bekko benchmark` reports docs/s on the held-out documents (same GPU for
-all models). propella-1 baselines are run on the same hardware.
+all models). The propella-1 baselines are run with vLLM on the same hardware as the
+students being compared: the published figures measure every model on one RTX A6000,
+with the propella-1 baselines in bf16 and the students in bf16, so the x axis compares
+like with like. The earlier fp16 runs on a Quadro RTX 8000 are kept in `runs/baselines/`
+for provenance, and are what a Turing card gives you.

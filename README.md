@@ -1,86 +1,93 @@
 <p align="center">
-  <img src="docs/assets/banner.svg" alt="propella-bekko: a ki-bekko koi with a propeller tail" width="720">
+  <img src="docs/assets/banner.svg" alt="propella-bekko: a ki-bekko koi with a propeller tail" width="600">
 </p>
 
 # propella-bekko
 
 Small, fast document annotators that predict the
-[propella-1](https://huggingface.co/ellamind/propella-1-4b) label space
-(content quality, educational value, content type, business sector, safety, PII,
-regional relevance, ...) in **a single forward pass**, without generating text.
+[propella-1](https://huggingface.co/ellamind/propella-1-4b) label space — content quality,
+information density, educational value, content type, business sector, safety, PII, regional and
+country relevance — in **a single forward pass**, without generating text.
 
 The goal is to make annotating large pretraining corpora (e.g. the
-[Dynawords](https://huggingface.co/collections/danish-foundation-models/dynawords))
-cheap enough to run on everything, while staying
-[Pareto-optimal](#results) against the three propella-1 models (0.6B / 1.7B / 4B).
+[Dynawords](https://huggingface.co/collections/danish-foundation-models/dynawords)) cheap enough to
+run on everything, while staying [Pareto-optimal](#results) against the three propella-1 models
+(0.6B / 1.7B / 4B).
 
 Motivation: [swedish-dynaword#79](https://huggingface.co/datasets/danish-foundation-models/swedish-dynaword/discussions/79).
 
+## Published
+
+| model | backbone | throughput | card |
+|---|---|---|---|
+| `propella-bekko-static` | bekko-static-embedding-v1, no attention | 686 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-static) |
+| `propella-bekko-a8m` | bekko-embedding-v1-a8m | 348 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a8m) |
+| `propella-bekko-a25m` | bekko-embedding-v1-a25m | 186 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a25m) |
+
+The annotations they were trained on, with the two independent reference annotation sets, are in
+[propella-bekko-data](https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data)
+(datasheet included).
+
 ## How it works
 
-* **Teacher labels**: existing propella-1-4b annotations from the annotated
-  Dynawords (`data/*/metadata.parquet`) and
+* **Teacher labels**: existing propella-1-4b annotations from the annotated Dynawords
+  (`data/*/metadata.parquet`) and
   [openeurollm/propella-annotations](https://huggingface.co/datasets/openeurollm/propella-annotations)
-  (FineWeb-2, FinePDFs), joined with their source texts.
-* **Students**: a backbone + one classification head per property
-  (softmax for single-select, sigmoid for multi-select). Backbones, smallest first:
-  1. [`bekko-static-embedding-v1`](https://huggingface.co/hotchpotch/bekko-static-embedding-v1) (no Transformer layers)
-  2. [`bekko-embedding-v1-a8m`](https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m)
-  3. [`bekko-embedding-v1-a25m`](https://huggingface.co/hotchpotch/bekko-embedding-v1-a25m)
+  (FineWeb-2, FinePDFs), joined with their source texts. Nothing is re-annotated.
+* **Students**: a backbone plus one classification head per property (softmax for single-select,
+  sigmoid for multi-select). The three backbones are, smallest first,
+  [`bekko-static-embedding-v1`](https://huggingface.co/hotchpotch/bekko-static-embedding-v1) (no
+  Transformer layers), [`bekko-embedding-v1-a8m`](https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m)
+  and [`bekko-embedding-v1-a25m`](https://huggingface.co/hotchpotch/bekko-embedding-v1-a25m).
 * Full-document length features (characters, words, whether the text was truncated) are passed to the
-  heads so length-dependent properties stay learnable under truncation.
+  heads, so length-dependent properties stay learnable under truncation.
 * `one_sentence_description` (free text) is not predicted.
 
 ## Quickstart
 
 ```bash
-make install                     # uv sync (Python 3.12, torch cu129)
-
-# held-out evaluation set (languages x domains), then a training set that excludes it
-uv run propella-bekko build-data --dynaword all --n-per-subset 100 \
-    --propella fineweb-2:all finepdfs:all --n-per-lang 300 --output data/heldout.parquet
-uv run propella-bekko build-data --dynaword all --n-per-subset 2000 \
-    --propella fineweb-2:all finepdfs:all --n-per-lang 5000 \
-    --exclude data/heldout.parquet --output data/train.parquet
-
-uv run propella-bekko train --config configs/static-v0.json
-uv run propella-bekko evaluate  --model runs/static-v0/model --data data/heldout.parquet
-uv run propella-bekko benchmark --model runs/static-v0/model --data data/heldout.parquet
-uv run propella-bekko annotate  --model runs/static-v0/model --input docs.parquet --output annotations.parquet
+make install                 # uv sync: Python 3.12, torch cu129
+make data                    # held-out set, 1,000-doc test sample, both training pools
+make models                  # train the three published students
 ```
+
+Each model card carries a copy-paste inference snippet that needs only `transformers`, `torch` and
+`safetensors` — no custom package, no `trust_remote_code`. The full pipeline, including the
+independent reference annotations, the propella-1 baselines, the figures and the model cards, is in
+[`docs/reproducing.md`](docs/reproducing.md).
 
 ## Results
 
-The propella-1 **overall score** (11/17 × mean quadratic-weighted kappa over the 11 ordinal
-properties + 1/17 × PII F1 + 5/17 × mean intersection-over-union over the 5 multi-select
-properties, §5.2 of [the paper](https://arxiv.org/abs/2602.12414)) on **1,000 held-out
-documents**, against two references. Throughput is documents/second on one Quadro RTX 8000.
+Agreement with two annotators that are not the teacher — DeepSeek-V4.1-Flash and GLM-5.3-Flash — on
+the same 300 held-out documents, macro-F1 across all properties. Throughput is documents per second
+on one Quadro RTX 8000; chance (always predicting the most frequent label) is 0.123.
 
 <p align="center">
-  <img src="docs/assets/pareto.svg" alt="Pareto: agreement with DeepSeek-V4.1-Flash annotations vs throughput" width="900">
+  <img src="docs/assets/pareto_combined.svg" alt="annotation quality against throughput, against two independent annotators" width="880">
 </p>
 
-| model | params | docs/s | vs stored propella-1-4b labels | vs DeepSeek-V4.1-Flash |
+| model | params | docs/s | vs DeepSeek-V4.1-Flash | vs GLM-5.3-Flash |
 |---|---|---|---|---|
-| propella-1-4b (reference, re-run) | 4B | 0.22 | 0.875 | 0.737 |
-| propella-1-1.7b | 1.7B | 0.50 | 0.808 | 0.703 |
-| propella-1-0.6b | 0.6B | 0.50 | 0.763 | 0.679 |
-| **a25m-xl-3ep** | 118M | **186** | **0.820** | **0.724** |
-| a8m-v1-pool | 106M | 376 | 0.779 | 0.694 |
-| static-v1-pool | 206M | 686 | 0.747 | 0.678 |
+| **propella-bekko-a25m** | 123M | **186** | **0.523** | **0.522** |
+| propella-bekko-a8m | 106M | 348 | 0.489 | 0.479 |
+| propella-bekko-static | 206M | 686 | 0.479 | 0.468 |
+| propella-1-0.6b | 600M | 0.14 | 0.498 | 0.501 |
+| propella-1-1.7b | 1.7B | 0.14 | 0.547 | 0.534 |
+| propella-1-4b | 4B | 0.06 | 0.571 | 0.549 |
+| DeepSeek-V4.1-Flash | — | — | — | 0.659 |
+| GLM-5.3-Flash | — | — | 0.659 | — |
 
-* **`a25m-xl-3ep`** (25M active parameters, distilled from 845k documents) **beats
-  propella-1-1.7b on both references** — 0.820 vs 0.808 against the stored propella labels and
-  0.724 vs 0.703 against the independent DeepSeek annotations — at ~370× the throughput. It
-  lands 0.013 short of propella-4b on the independent reference at 845× the throughput.
-* Ordinal properties are decoded to the **expected level** of the predicted distribution
-  rather than by argmax, which is worth +0.013 mean QWK for free
-  ([`experiments/010`](experiments/010-gliclass-and-decision-models.md)).
-* The **static model** (no Transformer layers) is the cheapest useful point: 686 docs/s at
-  0.747, and `a8m` sits in between at 376 docs/s.
+`a25m` is the point of the exercise: it lands close to the 4B teacher's agreement with an
+independent annotator at three orders of magnitude its throughput, and `static` is the cheapest
+useful point — still four times chance.
 
-Per-run details in [`experiments/`](experiments/). Tracked in the
-[tracking issue](../../issues?q=label%3Atracking).
+Against the stored propella-1-4b labels on the full 1,000 held-out documents, the same models score
+0.820 (`a25m`), 0.779 (`a8m`) and 0.747 (`static`) on the paper's overall score; propella-1-4b
+re-run scores 0.875 on its own labels.
+
+What moved those numbers — and what did not — is measured in [`experiments/`](experiments/):
+expected-value decoding for the ordinal properties (+0.013 QWK), a third epoch (+0.001), and no gain
+from pool cleaning, checkpoint averaging, bigger backbones or label-name initialisation.
 
 ## Repository layout
 
@@ -94,10 +101,10 @@ src/propella_bekko/
   metrics.py       agreement metrics (accuracy, macro-F1, QWK, Jaccard, ...)
   inference.py     fast length-bucketed annotation + throughput benchmark
   cli.py           `propella-bekko` command line
-configs/           one config per experiment
-experiments/       notes + results per experiment
-docs/              decisions, evaluation design, assets
-scripts/           misc (banner rendering)
+configs/           one config per run: the published ones plus what was tried and rejected
+experiments/       notes + results per experiment, indexed in experiments/README.md
+docs/              model sheet, evaluation design, reproducing.md, assets
+scripts/           data builds, reference annotation, scoring, figures, cards (scripts/README.md)
 ```
 
 ## Development
@@ -108,5 +115,5 @@ make test    # pytest
 make check   # what CI runs (no auto-fixing)
 ```
 
-Work is tracked in [issues](../../issues), grouped by milestone; the issue currently
-being worked on carries the `in progress` label.
+Work is tracked in [issues](../../issues), grouped by milestone; the issue currently being worked on
+carries the `in progress` label.
