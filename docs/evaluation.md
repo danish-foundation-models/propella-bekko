@@ -27,9 +27,14 @@ source, language and domain.
 
 ## Throughput
 
-`propella-bekko benchmark` reports docs/s on the held-out documents (same GPU for
-all models). The propella-1 baselines are run with vLLM on the same hardware as the
-students being compared: the published figures measure every model on one RTX A6000,
-with the propella-1 baselines in bf16 and the students in bf16, so the x axis compares
-like with like. The earlier fp16 runs on a Quadro RTX 8000 are kept in `runs/baselines/`
-for provenance, and are what a Turing card gives you.
+`propella-bekko benchmark` reports docs/s on the held-out documents, on one Quadro RTX 8000 in fp16
+for every model, students and propella-1 baselines alike, so the axis compares like with like.
+propella-1 baselines are run with vLLM on the same card.
+
+A bf16 rerun on an RTX A6000 was attempted and abandoned: with vLLM 0.10.2 and xgrammar
+schema-constrained decoding, propella-1-0.6b ran at 0.019 docs/s (54 s per document) — seven times
+slower than the same model in fp16 on the RTX 8000, which is a property of that serving stack and not
+of the model. Nothing in this release uses those numbers. The recipe that was tried is in
+[`docs/reproducing.md`](reproducing.md#5-reference-baselines-the-propella-1-models); on a newer vLLM
+with a faster structured-output backend (or by generating free-form JSON and parsing it) that run
+should be revisited, and would replace the fp16 baseline row wholesale.

@@ -81,8 +81,15 @@ done
 ```
 
 Each run writes a parquet with the annotations and a `.json` with documents per second and the number
-of failed JSON parses. Use `--dtype float16` on Turing, `bfloat16` on Ampere and later. The published
-baseline numbers come from the bf16 runs on one RTX A6000 unless stated otherwise.
+of failed JSON parses. Use `--dtype float16` on Turing, `bfloat16` on Ampere and later.
+
+The published numbers come from fp16 runs on one Quadro RTX 8000. A bf16 rerun on an RTX A6000 was
+abandoned after 0.6b measured 0.019 docs/s: with vLLM 0.10.2 the xgrammar schema-constrained decoder
+dominates, and it is faster to leave that path alone than to publish a throughput axis that says more
+about the serving stack than about the models. What that run needed, in full: vLLM 0.10.2,
+`transformers<5`, `ninja` on `PATH`, `CUDA_HOME` set, `VLLM_USE_FLASHINFER_SAMPLER=0`,
+`VLLM_ATTENTION_BACKEND=FLASH_ATTN`; newer vLLM versions need the `StructuredOutputsConfig` backend
+switch instead, and the script handles both.
 
 ## 6. Student predictions
 
