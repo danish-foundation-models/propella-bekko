@@ -83,13 +83,16 @@ done
 Each run writes a parquet with the annotations and a `.json` with documents per second and the number
 of failed JSON parses. Use `--dtype float16` on Turing, `bfloat16` on Ampere and later.
 
-The published numbers come from fp16 runs on one Quadro RTX 8000. A bf16 rerun on an RTX A6000 was
-abandoned after 0.6b measured 0.019 docs/s: with vLLM 0.10.2 the xgrammar schema-constrained decoder
-dominates, and it is faster to leave that path alone than to publish a throughput axis that says more
-about the serving stack than about the models. What that run needed, in full: vLLM 0.10.2,
-`transformers<5`, `ninja` on `PATH`, `CUDA_HOME` set, `VLLM_USE_FLASHINFER_SAMPLER=0`,
-`VLLM_ATTENTION_BACKEND=FLASH_ATTN`; newer vLLM versions need the `StructuredOutputsConfig` backend
-switch instead, and the script handles both.
+The published numbers come from bf16 runs on one **RTX A6000** with `--json-mode free`: propella's
+prompt already asks for JSON, and the object is parsed out of the completion. Do not use the
+schema-constrained decoder here — with vLLM 0.10.2 it spends nearly all of the runtime inside the
+decoder and measures 0.019 docs/s for propella-1-0.6b, against 2.7 docs/s for free-form generation on
+the same card.
+
+That environment, if you need to rebuild it: vLLM 0.10.2 with `transformers<5`, `ninja` on `PATH`,
+`CUDA_HOME` set, `VLLM_USE_FLASHINFER_SAMPLER=0`, `VLLM_ATTENTION_BACKEND=FLASH_ATTN`. For the
+students, a separate venv with the repository's own dependencies (`uv pip install -e .`), because
+their tokenizers are saved by transformers 5 and vLLM 0.10 wants transformers 4.
 
 ## 6. Student predictions
 

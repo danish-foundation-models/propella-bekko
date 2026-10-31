@@ -27,7 +27,13 @@ N = 300
 # Baselines measured in bf16 on an Ampere card supersede the fp16 Turing runs; both are
 # kept on disk, the figures use the bf16 ones when present.
 BASELINE_DIR = Path("runs/baselines/bf16")
-STUDENTS = ["static-long-ctx8192", "a8m-xl", "a25m-xl"]
+# run directory -> key used in the figure and the tables (the published a25m is the
+# 3-epoch run; `a25m-xl` is what the figures label it)
+STUDENTS = {
+    "static-long-ctx8192": "static-long-ctx8192",
+    "a8m-xl": "a8m-xl",
+    "a25m-xl-3ep": "a25m-xl",
+}
 PROPELLA = {
     "propella-1-0.6b": ("0.6b", 600),
     "propella-1-1.7b": ("1.7b", 1700),
@@ -99,13 +105,13 @@ def main() -> None:
         print(f"\n=== y axis: {reference} ({len(gold)} documents) ===")
 
         models = {}
-        for name in STUDENTS:
-            bench = json.loads(Path(f"runs/pareto/{name}.bench.json").read_text())
+        for run, name in STUDENTS.items():
+            bench = json.loads(Path(f"runs/pareto/{run}.bench.json").read_text())
             models[name] = {
                 "family": "student",
                 "params_M": round(bench["params_M"]),
                 "docs_per_s": bench["docs_per_s"],
-                **score(load_predictions(f"runs/pareto/{name}"), gold, fields),
+                **score(load_predictions(f"runs/pareto/{run}"), gold, fields),
             }
 
         for name, (short, params) in PROPELLA.items():

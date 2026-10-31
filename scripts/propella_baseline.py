@@ -18,6 +18,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 
@@ -42,6 +43,22 @@ def load_propella(repo: str):
     return mod
 
 
+def parse_json(text: str) -> dict | None:
+    """Parse the annotation object out of a completion, guided or not."""
+    text = re.sub(r" thinking.*?</think>", "", text, flags=re.S).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r"\{.*\}", text, flags=re.S)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", required=True)
@@ -55,6 +72,12 @@ def main():
     p.add_argument("--max-content-chars", type=int, default=50_000)
     p.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     p.add_argument("--dtype", default="float16")  # Turing has no bf16
+    p.add_argument(
+        "--json-mode",
+        choices=["guided", "free"],
+        default="guided",
+        help="guided: schema-constrained decoding; free: generate and parse the JSON",
+    )
     p.add_argument(
         "--structured-backend",
         default="xgrammar",
@@ -92,7 +115,10 @@ def main():
     tok = llm.get_tokenizer()
     schema = propella.get_annotation_response_schema(flatten=True, compact_whitespace=True)
     # Schema-constrained decoding: the kwarg moved twice between vLLM releases.
-    if hasattr(__import__("vllm.sampling_params", fromlist=["x"]), "StructuredOutputsParams"):
+    json_kwargs: dict = {}
+    if a.json_mode == "free":
+        pass
+    elif hasattr(__import__("vllm.sampling_params", fromlist=["x"]), "StructuredOutputsParams"):
         from vllm.sampling_params import StructuredOutputsParams
 
         json_kwargs = {"structured_outputs": StructuredOutputsParams(json=schema)}
@@ -122,9 +148,8 @@ def main():
 
     recs, failed = [], 0
     for r, o in zip(rows, outs, strict=True):
-        try:
-            ann = json.loads(o.outputs[0].text)
-        except json.JSONDecodeError:
+        ann = parse_json(o.outputs[0].text)
+        if ann is None:
             ann, failed = {}, failed + 1
         recs.append({"source": r["source"], "id": r["id"], **ann})
     pq.write_table(pa.Table.from_pylist(recs), a.output)

@@ -20,9 +20,9 @@ Motivation: [swedish-dynaword#79](https://huggingface.co/datasets/danish-foundat
 
 | model | backbone | throughput | card |
 |---|---|---|---|
-| `propella-bekko-static` | bekko-static-embedding-v1, no attention | 686 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-static) |
-| `propella-bekko-a8m` | bekko-embedding-v1-a8m | 348 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a8m) |
-| `propella-bekko-a25m` | bekko-embedding-v1-a25m | 186 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a25m) |
+| `propella-bekko-static` | bekko-static-embedding-v1, no attention | 296 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-static) |
+| `propella-bekko-a8m` | bekko-embedding-v1-a8m | 248 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a8m) |
+| `propella-bekko-a25m` | bekko-embedding-v1-a25m | 188 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a25m) |
 
 The annotations they were trained on, with the two independent reference annotation sets, are in
 [propella-bekko-data](https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data)
@@ -68,18 +68,20 @@ on one Quadro RTX 8000; chance (always predicting the most frequent label) is 0.
 
 | model | params | docs/s | vs DeepSeek-V4.1-Flash | vs GLM-5.3-Flash |
 |---|---|---|---|---|
-| **propella-bekko-a25m** | 123M | **186** | **0.523** | **0.522** |
-| propella-bekko-a8m | 106M | 348 | 0.489 | 0.479 |
-| propella-bekko-static | 206M | 686 | 0.479 | 0.468 |
-| propella-1-0.6b | 600M | 0.14 | 0.498 | 0.501 |
-| propella-1-1.7b | 1.7B | 0.14 | 0.547 | 0.534 |
-| propella-1-4b | 4B | 0.06 | 0.571 | 0.549 |
+| **propella-bekko-a25m** | 123M | **188** | **0.519** | **0.510** |
+| propella-bekko-a8m | 106M | 248 | 0.489 | 0.479 |
+| propella-bekko-static | 206M | 296 | 0.479 | 0.468 |
+| propella-1-0.6b | 600M | 2.73 | 0.501 | 0.500 |
+| propella-1-1.7b | 1.7B | 2.11 | 0.548 | 0.535 |
+| propella-1-4b | 4B | 1.00 | 0.571 | 0.544 |
 | DeepSeek-V4.1-Flash | — | — | — | 0.659 |
 | GLM-5.3-Flash | — | — | 0.659 | — |
 
-`a25m` is the point of the exercise: it lands close to the 4B teacher's agreement with an
-independent annotator at three orders of magnitude its throughput, and `static` is the cheapest
-useful point — still four times chance.
+`a25m` is the point of the exercise: 0.05 short of the 4B teacher's agreement with an independent
+annotator at roughly 190× its throughput, and `static` is the cheapest useful point — still four
+times chance. The propella-1 models are much faster here than in the first release of these numbers,
+because the baselines now generate free-form JSON instead of using a schema-constrained decoder that
+was spending most of the runtime in the decoder.
 
 Against the stored propella-1-4b labels on the full 1,000 held-out documents, the same models score
 0.820 (`a25m`), 0.779 (`a8m`) and 0.747 (`static`) on the paper's overall score; propella-1-4b

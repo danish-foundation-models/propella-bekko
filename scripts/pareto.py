@@ -46,12 +46,12 @@ PROPELLA_LABEL = {
 LLM_LABEL = {"glm-5.3-flash": "GLM-5.3-Flash", "deepseek-v4.1-flash": "DeepSeek-V4.1-Flash"}
 # (dx, dy, alignment) of each direct label, chosen so no two boxes collide.
 LABEL_OFFSET = {
-    "static-long-ctx8192": (0, -18, "center"),
-    "a8m-xl": (14, 14, "left"),
-    "a25m-xl": (-14, 8, "right"),
-    "propella-1-4b": (14, 10, "left"),
-    "propella-1-1.7b": (14, 0, "left"),
-    "propella-1-0.6b": (14, -12, "left"),
+    "static-long-ctx8192": (0, 18, "center"),
+    "a8m-xl": (0, -18, "center"),
+    "a25m-xl": (0, 18, "center"),
+    "propella-1-4b": (-14, 12, "right"),
+    "propella-1-1.7b": (14, 4, "left"),
+    "propella-1-0.6b": (14, -10, "left"),
 }
 X_TICKS = [0.1, 1, 10, 100, 1000]
 HARDWARE = "one Quadro RTX 8000"
@@ -309,9 +309,7 @@ def render_combined(paths: list[Path]) -> None:
             ax.tick_params(labelleft=False)
 
     fig.text(0.5, 0.125, "documents per second", ha="center", va="bottom", fontsize=10.5, color=FG)
-    fig.text(
-        0.5, 0.085, "on one Quadro RTX 8000", ha="center", va="bottom", fontsize=8.5, color=MUTED
-    )
+    fig.text(0.5, 0.085, f"on {HARDWARE}", ha="center", va="bottom", fontsize=8.5, color=MUTED)
 
     # one shared legend at the bottom: inside a panel it collides with the reference rule
     shared = fig.legend(

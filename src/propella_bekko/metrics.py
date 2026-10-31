@@ -9,7 +9,19 @@ from propella_bekko.schema import OTHER, Field
 
 
 def _norm_multi(v, labels: set[str]) -> set[str]:
-    return {x if x in labels else OTHER for x in (v or [])}
+    """Keep labels the taxonomy knows; anything else counts as `other` when it exists.
+
+    Free-form generation can emit a label outside the taxonomy (a country name the
+    training data never had, a typo); dropping it is the only option for a taxonomy
+    without an `other` bucket.
+    """
+    out: set[str] = set()
+    for x in v or []:
+        if x in labels:
+            out.add(x)
+        elif OTHER in labels:
+            out.add(OTHER)
+    return out
 
 
 def field_metrics(preds: list[dict], golds: list[dict], fields: list[Field]) -> dict[str, dict]:

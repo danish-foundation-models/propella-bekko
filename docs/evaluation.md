@@ -27,14 +27,17 @@ source, language and domain.
 
 ## Throughput
 
-`propella-bekko benchmark` reports docs/s on the held-out documents, on one Quadro RTX 8000 in fp16
-for every model, students and propella-1 baselines alike, so the axis compares like with like.
-propella-1 baselines are run with vLLM on the same card.
+`propella-bekko benchmark` reports docs/s on the held-out documents; the propella-1 baselines are run
+with vLLM on the same GPU. The published figures measure every model on one **RTX A6000** in bf16:
+the students with their own pipeline, the baselines with vLLM 0.10.2.
 
-A bf16 rerun on an RTX A6000 was attempted and abandoned: with vLLM 0.10.2 and xgrammar
-schema-constrained decoding, propella-1-0.6b ran at 0.019 docs/s (54 s per document) — seven times
-slower than the same model in fp16 on the RTX 8000, which is a property of that serving stack and not
-of the model. Nothing in this release uses those numbers. The recipe that was tried is in
-[`docs/reproducing.md`](reproducing.md#5-reference-baselines-the-propella-1-models); on a newer vLLM
-with a faster structured-output backend (or by generating free-form JSON and parsing it) that run
-should be revisited, and would replace the fp16 baseline row wholesale.
+Two things matter for the baseline numbers. First, dtype and hardware — Turing has no bf16, so the
+RTX 8000 numbers in the first release were fp16. Second, and much larger: schema-constrained decoding.
+With xgrammar constraining every step to propella's JSON schema, propella-1-0.6b ran at 0.019 docs/s;
+generating free-form and parsing the object (the prompt already asks for JSON, and the reference
+annotations were always parsed this way) gives 2.7 docs/s for the same model on the same card. The
+schema-constrained runs were measuring the decoder, not the model, and are not used.
+
+Free-form output occasionally names a label outside the taxonomy (a country the training data never
+had, a capitalised duplicate). Those are dropped — or counted as `other` where the property has such
+a bucket — rather than crashing the scorer.
