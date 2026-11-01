@@ -3,9 +3,10 @@
 Reads `runs/pareto_vs_<reference>.json` (built by scripts/pareto_vs_llms.py) and
 writes docs/assets/pareto_<reference>.svg and .png.
 
-Conventions: white background, one hue per model family (Okabe-Ito blue / vermillion),
-everything else grey; no title, no subtitle, no footnote - the axes and the direct
-labels carry the whole chart. The scatter holds the models whose throughput was
+Conventions: the shared palette in `propella_bekko.plotting` (deep navy ground, yellow
+text, cyan for the students, pink for the teacher); no title, no subtitle, no footnote -
+the axes and the direct labels carry the whole chart. Label offsets are hand-set; the
+renderer reports any two labels that still collide. The scatter holds the models whose throughput was
 measured on one GPU; the other LLM is a dashed quality rule; chance is a dotted floor;
 the solid grey line is the Pareto set (no faster model is at least as good).
 """
@@ -20,14 +21,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FixedLocator, FuncFormatter, NullLocator
 
-BG = "#ffffff"
-FG = "#1a1a1a"
-GRID = "#e3e3e3"
-MUTED = "#8c8c8c"
-STUDENT = "#0072b2"  # Okabe-Ito blue
-PROPELLA = "#d55e00"  # Okabe-Ito vermillion
-RULE = "#333333"
-FRONTIER = "#555555"
+from propella_bekko.plotting import BG, FG, GRID, LINK, MUTED, PROPELLA, STUDENT
+
+RULE = FG  # the dashed quality rule of the other annotator
+FRONTIER = LINK  # the Pareto frontier
 
 REFERENCE_NAME = {
     "deepseek-v4.1-flash": "DeepSeek-V4.1-Flash",
@@ -46,11 +43,11 @@ PROPELLA_LABEL = {
 LLM_LABEL = {"glm-5.3-flash": "GLM-5.3-Flash", "deepseek-v4.1-flash": "DeepSeek-V4.1-Flash"}
 # (dx, dy, alignment) of each direct label, chosen so no two boxes collide.
 LABEL_OFFSET = {
-    "static-long-ctx8192": (0, 18, "center"),
-    "a8m-xl": (0, -18, "center"),
-    "a25m-xl": (0, 18, "center"),
-    "propella-1-4b": (-14, 12, "right"),
-    "propella-1-1.7b": (14, 4, "left"),
+    "static-long-ctx8192": (12, -20, "left"),
+    "a8m-xl": (12, 0, "left"),
+    "a25m-xl": (12, 20, "left"),
+    "propella-1-4b": (-14, 16, "right"),
+    "propella-1-1.7b": (14, 8, "left"),
     "propella-1-0.6b": (14, -10, "left"),
 }
 X_TICKS = [0.1, 1, 10, 100, 1000]
@@ -328,6 +325,20 @@ def render_combined(paths: list[Path]) -> None:
 
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
+    # direct labels are placed by hand: say so when two of them still collide
+    for i, ax in enumerate(axes):
+        # Text.get_window_extent, not Annotation's: the latter includes the leader line
+        from matplotlib.text import Text
+
+        boxes = [
+            (t.get_text(), Text.get_window_extent(t, renderer))
+            for t in ax.texts
+            if t.get_text().strip()
+        ]
+        for a_i, (ta, ba) in enumerate(boxes):
+            for tb, bb in boxes[a_i + 1 :]:
+                if ba.overlaps(bb):
+                    print(f"  label collision in panel {i}: {ta!r} / {tb!r}")
     for i, ax in enumerate(axes):
         for other in axes:
             if other is ax:

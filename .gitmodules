@@ -1,0 +1,12 @@
+[submodule "models/propella-bekko-a25m"]
+	path = models/propella-bekko-a25m
+	url = https://huggingface.co/danish-foundation-models/propella-bekko-a25m
+[submodule "models/propella-bekko-a8m"]
+	path = models/propella-bekko-a8m
+	url = https://huggingface.co/danish-foundation-models/propella-bekko-a8m
+[submodule "models/propella-bekko-static"]
+	path = models/propella-bekko-static
+	url = https://huggingface.co/danish-foundation-models/propella-bekko-static
+[submodule "dataset"]
+	path = dataset
+	url = https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data

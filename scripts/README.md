@@ -59,8 +59,8 @@ that were run once per release or per experiment; `docs/reproducing.md` puts the
 | script | what it does |
 |---|---|
 | `example_output.py` | record one worked example per run, quoted in its model card |
-| `model_card.py` | fill `docs/model_sheet.md` for one run -> `models/<repo>/README.md` |
-| `refresh_release.py` | regenerate all three cards and the README table from the scores |
+| `update_sections.py` | rewrite the marked regions of the cards and the README from the scores |
+| `verify_remote_code.py` | check a published repo loads via `AutoModel` and matches the package |
 | `make_dataset_release.py`, `verify_dataset_release.py` | build and check the published dataset |
 | `render_banner.js` | render the banner SVG |
 

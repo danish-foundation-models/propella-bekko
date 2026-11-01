@@ -1,14 +1,14 @@
-"""Per-property agreement: one bar per property, student against teacher and chance.
+"""Per-property agreement, one panel per reference annotator.
 
 The overall macro-F1 in the cards is one number for 17 very different properties. This
-figure shows where it comes from: agreement with a reference annotator (default DeepSeek-
-V4.1-Flash on the same 300 held-out documents), one bar per property for the student, a
-marker for propella-1-4b on the same documents, and a line for chance.
+figure shows where it comes from: for each reference annotator (DeepSeek-V4.1-Flash on the
+left, GLM-5.3-Flash on the right, same 300 held-out documents), one row per property with
+the student's macro-F1, propella-1-4b's on the same documents, and the no-signal floor.
 
-    uv run python scripts/per_field.py                       # a25m vs DeepSeek
+    uv run python scripts/per_field.py                          # a25m -> models/propella-bekko-a25m/
     uv run python scripts/per_field.py --run a8m-xl --name propella-bekko-a8m
 
-Writes `docs/assets/per_property.svg` and `.png`, plus the numbers in
+Writes `docs/assets/per_property_<tier>.svg` and `.png`, and the numbers in
 `runs/per_property_<run>.json`.
 """
 
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 
 import matplotlib
@@ -26,13 +27,15 @@ import pyarrow.parquet as pq
 from matplotlib.lines import Line2D
 
 from propella_bekko.metrics import field_metrics
+from propella_bekko.plotting import BG, FG, FLOOR, LINK, PROPELLA, STUDENT, style_axes
 from propella_bekko.schema import fields_from_config
 
-BG, FG, GRID = "#191433", "#ffd45c", "#5e3570"
-STUDENT_C, TEACHER_C = "#5cf2ff", "#ff6fb1"
-LINK_C, FLOOR_C = "#8a7bb5", "#c9b8e8"
 N = 300
 REFS = {
+    "deepseek-v4.1-flash": "DeepSeek-V4.1-Flash",
+    "glm-5.3-flash": "GLM-5.3-Flash",
+}
+PATHS = {
     "deepseek-v4.1-flash": "runs/reference/deepseek-v4.1-flash-pareto300",
     "glm-5.3-flash": "runs/reference/glm-5.3-flash-pareto300",
 }
@@ -58,8 +61,6 @@ def scored(preds: dict, gold: dict, fields) -> dict[str, dict]:
 
 def chance(gold: dict, fields) -> dict[tuple, dict]:
     """Most frequent single-select label, no multi-select labels: the no-signal floor."""
-    from collections import Counter
-
     rows = [gold[k] for k in gold]
     const = {}
     for f in fields:
@@ -71,47 +72,14 @@ def chance(gold: dict, fields) -> dict[tuple, dict]:
     return {k: {**const, "source": k[0], "id": k[1]} for k in gold}
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--run", default="a25m-xl-3ep", help="run dir under runs/pareto")
-    ap.add_argument("--name", default="propella-bekko-a25m", help="name used in the legend")
-    ap.add_argument("--reference", default="deepseek-v4.1-flash", choices=list(REFS))
-    ap.add_argument("--out", default="docs/assets/per_property.svg")
-    a = ap.parse_args()
-
-    fields = fields_from_config(
-        json.loads(Path("runs/static-v0/model/config.json").read_text())["fields"]
-    )
-    rows = pq.read_table("data/heldout-sample1000.parquet").to_pylist()[:N]
-    wanted = {(r["source"], r["id"]) for r in rows}
-    gold = {k: v for k, v in load(REFS[a.reference]).items() if k in wanted}
-
-    mine = scored(load(f"runs/pareto/{a.run}"), gold, fields)
-    teacher = scored(load(TEACHER), gold, fields)
-    floor = scored(chance(gold, fields), gold, fields)
-
-    order = [f.name for f in fields]
-    order.sort(key=lambda n: mine[n]["macro_f1"])
-    data = {
-        n: {
-            "student": mine[n]["macro_f1"],
-            "teacher": teacher[n]["macro_f1"],
-            "chance": floor[n]["macro_f1"],
-        }
-        for n in order
-    }
-    Path(f"runs/per_property_{a.run}.json").write_text(json.dumps(data, indent=1))
-
-    fig, ax = plt.subplots(figsize=(7.6, 6.0), dpi=200)
-    fig.patch.set_facecolor(BG)
-    ax.set_facecolor(BG)
+def draw(ax, order: list[str], data: dict, name: str, reference: str) -> None:
     y = list(range(len(order)))
-    # dumbbell: one row per property, the segment is the gap between student and teacher
     for i, n in enumerate(order):
+        # dumbbell: the segment is the gap between the student and the teacher
         ax.plot(
             [data[n]["student"], data[n]["teacher"]],
             [i, i],
-            color=LINK_C,
+            color=LINK,
             linewidth=2.4,
             solid_capstyle="round",
             zorder=1,
@@ -119,25 +87,18 @@ def main() -> None:
         ax.plot(
             [data[n]["chance"], data[n]["chance"]],
             [i - 0.28, i + 0.28],
-            color=FLOOR_C,
+            color=FLOOR,
             linewidth=1.4,
             linestyle=(0, (1.2, 1.6)),
             zorder=1,
         )
-    ax.scatter(
-        [data[n]["student"] for n in order],
-        y,
-        s=58,
-        color=STUDENT_C,
-        zorder=3,
-        label=a.name,
-    )
+    ax.scatter([data[n]["student"] for n in order], y, s=58, color=STUDENT, zorder=3, label=name)
     ax.scatter(
         [data[n]["teacher"] for n in order],
         y,
         marker="D",
         s=28,
-        color=TEACHER_C,
+        color=PROPELLA,
         zorder=4,
         label="propella-1-4b",
     )
@@ -152,58 +113,118 @@ def main() -> None:
             va="center",
             ha="left" if inside else "right",
             fontsize=7,
-            color=STUDENT_C,
+            color=STUDENT,
         )
 
-    ax.set_yticks(list(y))
-    ax.set_yticklabels(order, fontsize=8, color=FG)
+    ax.set_yticks(y)
     ax.set_xlim(0, 1.0)
-    ax.tick_params(axis="x", colors=FG, labelsize=8)
-    ax.set_xlabel(f"macro-F1 vs {a.reference}, 300 held-out documents", color=FG, fontsize=9)
-    ax.set_title(
-        f"{a.name} per property, against the teacher that labelled it",
-        color=FG,
+    ax.set_ylim(-0.6, len(order) - 0.4)
+    ax.set_xlabel("macro-F1", color=FG, fontsize=9)
+    ax.text(
+        0.0,
+        1.02,
+        f"vs {REFS[reference]}",
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
         fontsize=10,
-        pad=10,
+        color=FG,
     )
-    for spine in ax.spines.values():
-        spine.set_color(GRID)
-    ax.grid(axis="x", color=GRID, linewidth=0.6, alpha=0.7)
-    ax.set_axisbelow(True)
+    style_axes(ax, grid_axis="x")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run", default="a25m-xl-3ep", help="run dir under runs/pareto")
+    ap.add_argument("--name", default="propella-bekko-a25m", help="name used in the legend")
+    ap.add_argument("--out", default="docs/assets/per_property_a25m.svg")
+    a = ap.parse_args()
+
+    fields = fields_from_config(
+        json.loads(Path("runs/static-v0/model/config.json").read_text())["fields"]
+    )
+    rows = pq.read_table("data/heldout-sample1000.parquet").to_pylist()[:N]
+    wanted = {(r["source"], r["id"]) for r in rows}
+
+    mine = load(f"runs/pareto/{a.run}")
+    teacher = load(TEACHER)
+
+    scores: dict[str, dict] = {}
+    for reference in REFS:
+        gold = {k: v for k, v in load(PATHS[reference]).items() if k in wanted}
+        s, t, f = (
+            scored(mine, gold, fields),
+            scored(teacher, gold, fields),
+            scored(chance(gold, fields), gold, fields),
+        )
+        scores[reference] = {
+            n: {
+                "student": s[n]["macro_f1"],
+                "teacher": t[n]["macro_f1"],
+                "chance": f[n]["macro_f1"],
+            }
+            for n in s
+        }
+    Path(f"runs/per_property_{a.run}.json").write_text(json.dumps(scores, indent=1))
+
+    # one order for both panels, taken from the DeepSeek panel: weakest property at the bottom
+    order = sorted(
+        scores["deepseek-v4.1-flash"], key=lambda n: scores["deepseek-v4.1-flash"][n]["student"]
+    )
+
+    fig, axes = plt.subplots(
+        1, len(REFS), figsize=(11.4, 6.0), dpi=200, sharey=True, layout="constrained"
+    )
+    fig.patch.set_facecolor(BG)
+    for i, (ax, reference) in enumerate(zip(axes, REFS, strict=False)):
+        draw(ax, order, scores[reference], a.name, reference)
+        if i == 0:
+            ax.set_yticklabels(order, fontsize=8, color=FG)
+        ax.set_yticks(list(range(len(order))))
+        if i:
+            ax.tick_params(labelleft=False)
+
     handles = [
-        Line2D([], [], marker="o", linestyle="", markersize=7, color=STUDENT_C, label=a.name),
+        Line2D([], [], marker="o", linestyle="", markersize=7, color=STUDENT, label=a.name),
         Line2D(
-            [], [], marker="D", linestyle="", markersize=5, color=TEACHER_C, label="propella-1-4b"
+            [], [], marker="D", linestyle="", markersize=5, color=PROPELLA, label="propella-1-4b"
         ),
         Line2D(
-            [],
-            [],
-            linestyle=(0, (1.5, 1.5)),
-            linewidth=1.1,
-            color=FLOOR_C,
-            label="no-signal floor",
+            [], [], linestyle=(0, (1.5, 1.5)), linewidth=1.1, color=FLOOR, label="no-signal floor"
         ),
     ]
-    ax.legend(
+    leg = fig.legend(
         handles=handles,
-        loc="lower right",
+        loc="outside lower center",
+        ncol=3,
         frameon=False,
-        fontsize=8,
-        labelcolor=FG,
-        handletextpad=0.4,
+        fontsize=9,
+        handletextpad=0.5,
+        columnspacing=1.6,
     )
-    fig.tight_layout()
+    for text in leg.get_texts():
+        text.set_color(FG)
+    fig.text(
+        0.5,
+        1.0,
+        f"{a.name} per property, 300 held-out documents, agreement with each reference annotator",
+        ha="center",
+        va="bottom",
+        fontsize=10,
+        color=FG,
+    )
 
+    # SVG only: the Hub rejects binary files pushed over git, and GitHub renders SVG
     out = Path(a.out)
     fig.savefig(out, facecolor=BG)
-    fig.savefig(out.with_suffix(".png"), facecolor=BG)
-    print(f"wrote {out} and {out.with_suffix('.png')}")
-    mean_gap = sum(data[n]["teacher"] - data[n]["student"] for n in order) / len(order)
-    worst = order[:3]
-    best = order[-3:]
-    print(f"mean gap to the teacher: {mean_gap:+.3f}")
-    print("furthest behind:", ", ".join(worst))
-    print("closest to / above the teacher:", ", ".join(reversed(best)))
+    print(f"wrote {out}")
+    for reference in REFS:
+        d = scores[reference]
+        gap = sum(d[n]["teacher"] - d[n]["student"] for n in order) / len(order)
+        above = [n for n in order if d[n]["student"] >= d[n]["teacher"]]
+        print(
+            f"{reference}: mean gap to teacher {gap:+.3f}, at or above on {len(above)} properties"
+        )
 
 
 if __name__ == "__main__":

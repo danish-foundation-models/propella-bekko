@@ -26,8 +26,9 @@ Motivation: [swedish-dynaword#79](https://huggingface.co/datasets/danish-foundat
 | `propella-bekko-a8m` | bekko-embedding-v1-a8m | 248 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a8m) |
 | `propella-bekko-a25m` | bekko-embedding-v1-a25m | 188 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a25m) |
 
-The cards live in [`models/`](models) — one directory per published model, mirroring its Hub repo, so
-a card is edited and reviewed here and uploaded as it stands.
+The published repos are submodules of this one — [`models/`](models) holds the three model repos,
+[`dataset/`](dataset) the data release — so a card is edited in place, reviewed in this repository's
+diff and published by pushing the submodule (`make checkout` on a fresh clone).
 
 The annotations they were trained on, with the two independent reference annotation sets, are in
 [propella-bekko-data](https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data)
@@ -72,6 +73,7 @@ on one RTX A6000, in bf16 for every model; chance (always predicting the most fr
   <img src="docs/assets/pareto_combined.svg" alt="annotation quality against throughput, against two independent annotators" width="880">
 </p>
 
+<!-- start results-table -->
 | model | params | docs/s | vs DeepSeek-V4.1-Flash | vs GLM-5.3-Flash |
 |---|---|---|---|---|
 | **propella-bekko-a25m** | 123M | 188 | 0.519 | 0.510 |
@@ -82,6 +84,7 @@ on one RTX A6000, in bf16 for every model; chance (always predicting the most fr
 | propella-1-4b | 4B | 1.00 | 0.571 | 0.544 |
 | DeepSeek-V4.1-Flash | — | — | — | 0.659 |
 | GLM-5.3-Flash | — | — | 0.659 | — |
+<!-- end results-table -->
 
 `a25m` is the point of the exercise: 0.05 short of the 4B teacher's agreement with an independent
 annotator at roughly 190× its throughput, and `static` is the cheapest useful point — still four
@@ -89,17 +92,18 @@ times chance. The propella-1 models are much faster here than in the first relea
 because the baselines now generate free-form JSON instead of using a schema-constrained decoder that
 was spending most of the runtime in the decoder.
 
-Property by property, against DeepSeek-V4.1-Flash on the same 300 documents (`a25m` in cyan,
-propella-1-4b in pink):
+Property by property, against both reference annotators on the same 300 documents (`a25m` in cyan,
+propella-1-4b in pink; DeepSeek-V4.1-Flash left, GLM-5.3-Flash right):
 
 <p align="center">
-  <img src="docs/assets/per_property_a25m.svg" width="640" alt="per-property macro-F1 for propella-bekko-a25m against DeepSeek-V4.1-Flash, with propella-1-4b on the same documents">
+  <img src="https://huggingface.co/danish-foundation-models/propella-bekko-a25m/resolve/main/per_property.svg" width="780" alt="per-property macro-F1 for propella-bekko-a25m against DeepSeek-V4.1-Flash and GLM-5.3-Flash, with propella-1-4b on the same documents">
 </p>
 
 Most of the distance to the teacher sits in `content_length` (−0.26), `country_relevance` (−0.23) and
 `commercial_bias` (−0.16), while six properties are already at or above propella-1-4b's own score
 (`audience_level`, `content_quality`, `content_ratio`, `educational_value`, `information_density`,
-`pii_presence`). The per-property figures for the other two students are in `docs/assets/`.
+`pii_presence`); against GLM-5.3-Flash the mean gap is half as large and seven are at or above.
+Each model repo carries its own copy of that figure.
 
 Against the stored propella-1-4b labels on the full 1,000 held-out documents, the same models score
 0.820 (`a25m`), 0.779 (`a8m`) and 0.747 (`static`) on the paper's overall score; propella-1-4b

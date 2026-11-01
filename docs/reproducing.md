@@ -114,39 +114,47 @@ one figure per reference plus the combined two-panel figure used in the cards.
 
 ## 8. Model cards and the Hub
 
-Each published model has a directory here that mirrors its Hub repo — `models/propella-bekko-a25m/`
-holds the card as `README.md` plus the banner, the two figures, the property reference and the icon,
-so the card is a normal file in this repository: edit it, review it in a diff, and upload the
-directory as it stands.
+The published repos are checked out here as submodules — `models/propella-bekko-a25m/`, `-a8m/`,
+`-static/` and `dataset/` for the data release — so a card is edited in place, reviewed in this
+repository's diff, and published by pushing the submodule:
 
 ```bash
-make per-field   # per-property figure for each student -> docs/assets/per_property_<tier>.svg
-make cards       # docs/model_sheet.md + runs/pareto_vs_*.json -> models/<repo>/README.md
-make assets      # copy the shared figures into the model directories
-make publish     # hf upload of each model directory and its checkpoint
+make checkout    # git submodule update --init --recursive
+make per-field   # per-property figure, written into each model repo
+make sections    # rewrite only the marked regions of the cards and the README
+make publish     # push the model repos, then record their new commits here
 ```
 
-`make cards` is optional: the cards are checked in, and regenerating only rewrites the numbers from
-`runs/pareto_vs_*.json` and `runs/per_property_<run>.json` (via `src/propella_bekko/release.py`), so
-a hand edit and a regeneration touch the same files and show up in the same diff. `make assets` only
-copies — the per-property figure is the one thing per model, everything else is shared.
+The cards are hand-written. Two things in them are generated, and each sits between markers so the
+script touches nothing else:
 
-Uploading is plain `hf upload`; each model takes two calls, the card directory and the checkpoint:
+```
+<!-- start results-table -->
+| model | params | docs/s | vs DeepSeek | vs GLM-5.3 |
+...
+<!-- end results-table -->
+```
+
+`scripts/update_sections.py` fills those regions from `runs/pareto_vs_*.json` (throughput and
+agreement, bf16 on one RTX A6000) and `runs/per_property_<run>.json` (the sentence under the figure).
+`--check` exits non-zero when a card is out of date, and skips the cards when the submodules are not
+checked out (which is what CI does).
+
+The checkpoints themselves are not in git; they are uploaded from the run directory:
 
 ```bash
-hf upload danish-foundation-models/propella-bekko-a25m models/propella-bekko-a25m .
 hf upload danish-foundation-models/propella-bekko-a25m runs/a25m-xl-3ep/model .
+hf upload danish-foundation-models/propella-bekko-a25m runs/a25m-xl-3ep/thresholds.json .
 ```
 
 `docs/property_descriptions.md` is propella-1's own property reference, copied here (Apache-2.0) and
-shipped next to each card so the definitions behind the labels stay available even if the original
-moves.
+shipped inside each model repo so the definitions behind the labels stay available even if the
+original moves.
 
 ## 9. The dataset
 
 ```bash
-uv run python scripts/make_dataset_release.py --out ../propella-bekko-data
-uv run python scripts/verify_dataset_release.py
+make dataset   # rebuild data/ + stats.json into the `dataset` submodule, then verify
 ```
 
 The release carries the document text; see

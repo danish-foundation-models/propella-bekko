@@ -4,7 +4,7 @@ Public release: rows carry the document text as the annotators saw it (up to 50,
 characters of head plus 10,000 of tail), alongside the corpus coordinates, a
 normalised `text_sha1` of the full text and the full-document lengths.
 
-    uv run python scripts/make_dataset_release.py --out ../propella-bekko-dataset
+    uv run python scripts/make_dataset_release.py --out dataset
 
 The training pool is streamed batch by batch and written shard by shard, so the
 whole pool is never held in memory.

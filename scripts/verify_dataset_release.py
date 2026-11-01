@@ -8,7 +8,7 @@ from collections import Counter
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
-REPO = "/home/kenneth/githubs/propella-bekko-dataset"
+REPO = "dataset"  # the Hub dataset repo, checked out as a submodule
 PROPS = [
     "content_integrity", "content_ratio", "content_length", "content_type", "business_sector",
     "technical_content", "content_quality", "information_density", "educational_value",
