@@ -25,9 +25,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pyarrow.parquet as pq
 from matplotlib.lines import Line2D
+from palette import BG, FG, FLOOR, LINK, PROPELLA, STUDENT, style_axes
 
 from propella_bekko.metrics import field_metrics
-from propella_bekko.plotting import BG, FG, FLOOR, LINK, PROPELLA, STUDENT, style_axes
 from propella_bekko.schema import fields_from_config
 
 N = 300

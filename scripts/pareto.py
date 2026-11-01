@@ -20,8 +20,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FixedLocator, FuncFormatter, NullLocator
-
-from propella_bekko.plotting import BG, FG, GRID, LINK, MUTED, PROPELLA, STUDENT
+from palette import BG, FG, GRID, LINK, MUTED, PROPELLA, STUDENT
 
 RULE = FG  # the dashed quality rule of the other annotator
 FRONTIER = LINK  # the Pareto frontier

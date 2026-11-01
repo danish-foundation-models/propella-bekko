@@ -35,6 +35,7 @@ that were run once per release or per experiment; `docs/reproducing.md` puts the
 | `pareto_vs_llms.py` | the same against an LLM reference annotator, one JSON per reference |
 | `pareto.py` | the Pareto figures (one per reference, plus the combined two-panel figure) |
 | `per_field.py` | per-property agreement figure (student, teacher and the no-signal floor) |
+| `palette.py` | the one palette every figure uses |
 | `pareto_two.py` | both Paretos in one figure |
 | `mf1_vs_glm.py` | macro-F1 against the 300 documents that have GLM labels |
 | `field_compare.py` | per-property comparison against the propella-1 baselines |
