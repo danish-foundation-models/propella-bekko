@@ -114,15 +114,33 @@ one figure per reference plus the combined two-panel figure used in the cards.
 
 ## 8. Model cards and the Hub
 
+Each published model has a directory here that mirrors its Hub repo — `models/propella-bekko-a25m/`
+holds the card as `README.md` plus the banner, the two figures, the property reference and the icon,
+so the card is a normal file in this repository: edit it, review it in a diff, and upload the
+directory as it stands.
+
 ```bash
-uv run python scripts/example_output.py a25m-xl-3ep a8m-xl static-long-ctx8192  # runs/<run>/example_output.json
-uv run python scripts/model_card.py runs/a25m-xl-3ep propella-bekko-a25m --tier large \
-    --docs-per-s 186 --mf1-deepseek 0.523 --mf1-glm 0.522 --n-train "844,912 documents"
-HF_TOKEN=... uv run python scripts/publish.py runs/a25m-xl-3ep danish-foundation-models/propella-bekko-a25m
+make per-field   # per-property figure for each student -> docs/assets/per_property_<tier>.svg
+make cards       # docs/model_sheet.md + runs/pareto_vs_*.json -> models/<repo>/README.md
+make assets      # copy the shared figures into the model directories
+make publish     # hf upload of each model directory and its checkpoint
 ```
 
-The card is generated from `docs/model_sheet.md`, so all three cards stay structurally identical. The
-banner, the combined figure and `docs/icon.png` are uploaded alongside it.
+`make cards` is optional: the cards are checked in, and regenerating only rewrites the numbers from
+`runs/pareto_vs_*.json` and `runs/per_property_<run>.json` (via `src/propella_bekko/release.py`), so
+a hand edit and a regeneration touch the same files and show up in the same diff. `make assets` only
+copies — the per-property figure is the one thing per model, everything else is shared.
+
+Uploading is plain `hf upload`; each model takes two calls, the card directory and the checkpoint:
+
+```bash
+hf upload danish-foundation-models/propella-bekko-a25m models/propella-bekko-a25m .
+hf upload danish-foundation-models/propella-bekko-a25m runs/a25m-xl-3ep/model .
+```
+
+`docs/property_descriptions.md` is propella-1's own property reference, copied here (Apache-2.0) and
+shipped next to each card so the definitions behind the labels stay available even if the original
+moves.
 
 ## 9. The dataset
 

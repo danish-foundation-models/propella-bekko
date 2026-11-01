@@ -1,0 +1,7 @@
+{
+  "content_type": 0.25,
+  "business_sector": 0.25,
+  "technical_content": 0.3,
+  "regional_relevance": 0.15,
+  "country_relevance": 0.15
+}

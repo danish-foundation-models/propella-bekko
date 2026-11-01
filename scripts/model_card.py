@@ -1,63 +1,70 @@
 """Generate the model sheet for a trained student.
 
-    uv run python scripts/model_card.py runs/a25m-xl propella-bekko-a25m \
-        --tier large --docs-per-s 186 --overall 0.811 \
-        --mf1-deepseek 0.523 --mf1-glm 0.522 --train-minutes 211
+    uv run python scripts/model_card.py runs/a25m-xl-3ep propella-bekko-a25m \
+        --tier large --pareto-key a25m-xl --train-minutes 316
 
 The sheet itself lives in `docs/model_sheet.md` and is identical for every model: this
 script only fills in the numbers, so the three published cards cannot drift apart in
 structure or in the wording of the limitations.
 
-Writes `runs/<run>/MODEL_CARD.md`, which scripts/publish.py uploads as README.md.
+Every number in the card — throughput, agreement, parameters, and the rows for the other
+two students — is read from `runs/pareto_vs_*.json`, the same files that feed the README
+table and the Pareto figures. Nothing is retyped here.
+
+Writes `models/<repo>/README.md` — the card is a file in this repository, in the directory
+that mirrors the Hub repo, so it is edited and reviewed like any other document.
 """
 
 import argparse
 import json
+import sys
+import textwrap
 from pathlib import Path
+
+from propella_bekko.release import PARETO, baseline_rows, load, params, student_rows
 
 SHEET = Path("docs/model_sheet.md")
 
 TIERS = {
     "static": dict(
-        desc="206M parameters with no Transformer layers — 686 documents/s on one RTX 8000",
         backbone="[`bekko-static-embedding-v1`](https://huggingface.co/hotchpotch/bekko-static-embedding-v1) "
         "— static token embeddings pooled into one document vector, no attention",
-        params="206M",
         max_length="8,192",
         tail_tokens="512",
     ),
     "small": dict(
-        desc="106M parameters, 8M of them active — 348 documents/s on one RTX 8000",
         backbone="[`bekko-embedding-v1-a8m`](https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m)",
-        params="106M",
         max_length="1,024",
         tail_tokens="512",
     ),
     "large": dict(
-        desc="123M parameters, 25M of them active — 186 documents/s on one RTX 8000",
         backbone="[`bekko-embedding-v1-a25m`](https://huggingface.co/hotchpotch/bekko-embedding-v1-a25m)",
-        params="123M",
         max_length="1,024",
         tail_tokens="512",
     ),
 }
 
 
-# Students that were graded against the same two reference annotators (300 docs, macro-F1),
-# with throughput on one Quadro RTX 8000. The row for the model being published is bolded.
-STUDENTS = {
-    "propella-bekko-a25m": ("123M", "186", "0.523", "0.522"),
-    "propella-bekko-a8m": ("106M", "348", "0.489", "0.479"),
-    "propella-bekko-static": ("206M", "686", "0.479", "0.468"),
-}
-
-
-def student_rows(repo_name: str) -> str:
-    rows = []
-    for name, (params, docs_per_s, ds, glm) in STUDENTS.items():
-        label = f"**{name}**" if name == repo_name else name
-        rows.append(f"| {label} | {params} | {docs_per_s} | {ds} | {glm} |")
-    return "\n".join(rows)
+def per_property_note(data: dict[str, dict[str, float]]) -> str:
+    """Two sentences from runs/per_property_<run>.json: where the gap is, where there is none."""
+    gaps = sorted(data.items(), key=lambda kv: kv[1]["student"] - kv[1]["teacher"])
+    widest = ", ".join(
+        f"`{name}` ({data[name]['student'] - data[name]['teacher']:+.2f})".replace("-", "\u2212")
+        for name, _ in gaps[:3]
+    )
+    above = sorted(name for name, v in data.items() if v["student"] >= v["teacher"])
+    at_or_above = (
+        f"{len(above)} of {len(data)} are at or above propella-1-4b's own score: "
+        + ", ".join(f"`{name}`" for name in above)
+        + "."
+        if above
+        else "No property reaches propella-1-4b's own score."
+    )
+    text = (
+        f"Most of the distance to the teacher sits in three properties — {widest} — "
+        f"while {at_or_above}"
+    )
+    return textwrap.fill(text, width=100, break_on_hyphens=False, break_long_words=False)
 
 
 def main() -> None:
@@ -65,17 +72,19 @@ def main() -> None:
     ap.add_argument("run")
     ap.add_argument("repo_name")
     ap.add_argument("--tier", required=True, choices=list(TIERS))
-    ap.add_argument("--docs-per-s", required=True)
     ap.add_argument(
-        "--overall", default=None, help="kept for older cards; the sheet no longer uses it"
+        "--pareto-key", required=True, help="key in runs/pareto_vs_*.json for this model"
     )
-    ap.add_argument("--mf1-deepseek", required=True)
-    ap.add_argument("--mf1-glm", required=True)
     ap.add_argument("--n-train", default="the training pool (403k documents)")
     ap.add_argument("--n-langs", default="20")
-    ap.add_argument("--hardware", default="one Quadro RTX 8000", help="where docs/s was measured")
+    ap.add_argument("--hardware", default="one RTX A6000", help="where docs/s was measured")
     ap.add_argument("--train-minutes", help="override when the run kept no results.json")
     a = ap.parse_args()
+
+    data = load()
+    mine = data[PARETO[0]].get(a.pareto_key)
+    if mine is None:
+        sys.exit(f"{a.pareto_key} not in runs/pareto_vs_{PARETO[0]}.json")
 
     run = Path(a.run)
     results = run / "results.json"
@@ -89,12 +98,12 @@ def main() -> None:
     model_cfg_path = run / "model" / "config.json"
     model_cfg = json.loads(model_cfg_path.read_text()) if model_cfg_path.exists() else {}
     max_length = (
-        f"{model_cfg.get('max_length', tier['max_length']):,}"
+        f"{model_cfg['max_length']:,}"
         if isinstance(model_cfg.get("max_length"), int)
         else tier["max_length"]
     )
     tail_tokens = (
-        f"{model_cfg.get('tail_tokens', tier['tail_tokens']):,}"
+        f"{model_cfg['tail_tokens']:,}"
         if isinstance(model_cfg.get("tail_tokens"), int)
         else tier["tail_tokens"]
     )
@@ -153,13 +162,15 @@ dim = spec["dim"]"""
     else:
         train_setup = "training setup not recorded"
 
+    per_prop_file = Path(f"runs/per_property_{run.name}.json")
+    if not per_prop_file.exists():
+        sys.exit(f"missing {per_prop_file}: run scripts/per_field.py --run {run.name} first")
+    per_prop = json.loads(per_prop_file.read_text())
+
     fields = {
-        "repo_name": a.repo_name,
         "repo_id": f"danish-foundation-models/{a.repo_name}",
-        "tier": a.tier,
-        "tier_desc": tier["desc"],
         "backbone": tier["backbone"],
-        "params": tier["params"],
+        "params": params(mine),
         "max_length": max_length,
         "tail_tokens": tail_tokens,
         "train_setup": train_setup,
@@ -167,14 +178,14 @@ dim = spec["dim"]"""
         "n_langs": a.n_langs,
         "hardware": a.hardware,
         "title": a.repo_name[:1].upper() + a.repo_name[1:],
-        "student_rows": student_rows(a.repo_name),
+        "student_rows": "\n".join(student_rows(data, bold=a.repo_name)),
+        "baseline_rows": "\n".join(baseline_rows(data)),
         "train_minutes": minutes,
         "thresholds_note": thresholds_note,
         "encoder_block": encoder_block,
         "example_output": example_output,
-        "docs_per_s": a.docs_per_s,
-        "mf1_deepseek": a.mf1_deepseek,
-        "mf1_glm": a.mf1_glm,
+        "docs_per_s": f"{mine['docs_per_s']:.0f}",
+        "per_property_note": per_property_note(per_prop),
     }
     # Plain replacement rather than str.format: the sheet quotes bibtex, whose braces
     # would otherwise have to be escaped.
@@ -184,7 +195,10 @@ dim = spec["dim"]"""
     leftover = [k for k in fields if "{" + k + "}" in card]
     assert not leftover, f"unfilled placeholders: {leftover}"
 
-    out = run / "MODEL_CARD.md"
+    # the card is a file in this repository, in the directory that mirrors the Hub repo,
+    # so it is edited and reviewed like any other document
+    out = Path("models") / a.repo_name / "README.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(card)
     print(f"wrote {out}")
 

@@ -7,7 +7,9 @@
 Small, fast document annotators that predict the
 [propella-1](https://huggingface.co/ellamind/propella-1-4b) label space — content quality,
 information density, educational value, content type, business sector, safety, PII, regional and
-country relevance — in **a single forward pass**, without generating text.
+country relevance — in **a single forward pass**, without generating text. The labels are
+propella-1's own, except `country_relevance`, which keeps the 64 most frequent countries plus
+`other` (see [decisions](docs/decisions.md)).
 
 The goal is to make annotating large pretraining corpora (e.g. the
 [Dynawords](https://huggingface.co/collections/danish-foundation-models/dynawords)) cheap enough to
@@ -23,6 +25,9 @@ Motivation: [swedish-dynaword#79](https://huggingface.co/datasets/danish-foundat
 | `propella-bekko-static` | bekko-static-embedding-v1, no attention | 296 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-static) |
 | `propella-bekko-a8m` | bekko-embedding-v1-a8m | 248 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a8m) |
 | `propella-bekko-a25m` | bekko-embedding-v1-a25m | 188 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a25m) |
+
+The cards live in [`models/`](models) — one directory per published model, mirroring its Hub repo, so
+a card is edited and reviewed here and uploaded as it stands.
 
 The annotations they were trained on, with the two independent reference annotation sets, are in
 [propella-bekko-data](https://huggingface.co/datasets/danish-foundation-models/propella-bekko-data)
@@ -60,7 +65,8 @@ independent reference annotations, the propella-1 baselines, the figures and the
 
 Agreement with two annotators that are not the teacher — DeepSeek-V4.1-Flash and GLM-5.3-Flash — on
 the same 300 held-out documents, macro-F1 across all properties. Throughput is documents per second
-on one Quadro RTX 8000; chance (always predicting the most frequent label) is 0.123.
+on one RTX A6000, in bf16 for every model; chance (always predicting the most frequent label) is
+0.123.
 
 <p align="center">
   <img src="docs/assets/pareto_combined.svg" alt="annotation quality against throughput, against two independent annotators" width="880">
@@ -68,7 +74,7 @@ on one Quadro RTX 8000; chance (always predicting the most frequent label) is 0.
 
 | model | params | docs/s | vs DeepSeek-V4.1-Flash | vs GLM-5.3-Flash |
 |---|---|---|---|---|
-| **propella-bekko-a25m** | 123M | **188** | **0.519** | **0.510** |
+| **propella-bekko-a25m** | 123M | 188 | 0.519 | 0.510 |
 | propella-bekko-a8m | 106M | 248 | 0.489 | 0.479 |
 | propella-bekko-static | 206M | 296 | 0.479 | 0.468 |
 | propella-1-0.6b | 600M | 2.73 | 0.501 | 0.500 |
@@ -82,6 +88,18 @@ annotator at roughly 190× its throughput, and `static` is the cheapest useful p
 times chance. The propella-1 models are much faster here than in the first release of these numbers,
 because the baselines now generate free-form JSON instead of using a schema-constrained decoder that
 was spending most of the runtime in the decoder.
+
+Property by property, against DeepSeek-V4.1-Flash on the same 300 documents (`a25m` in cyan,
+propella-1-4b in pink):
+
+<p align="center">
+  <img src="docs/assets/per_property_a25m.svg" width="640" alt="per-property macro-F1 for propella-bekko-a25m against DeepSeek-V4.1-Flash, with propella-1-4b on the same documents">
+</p>
+
+Most of the distance to the teacher sits in `content_length` (−0.26), `country_relevance` (−0.23) and
+`commercial_bias` (−0.16), while six properties are already at or above propella-1-4b's own score
+(`audience_level`, `content_quality`, `content_ratio`, `educational_value`, `information_density`,
+`pii_presence`). The per-property figures for the other two students are in `docs/assets/`.
 
 Against the stored propella-1-4b labels on the full 1,000 held-out documents, the same models score
 0.820 (`a25m`), 0.779 (`a8m`) and 0.747 (`static`) on the paper's overall score; propella-1-4b

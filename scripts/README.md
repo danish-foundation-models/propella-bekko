@@ -34,6 +34,7 @@ that were run once per release or per experiment; `docs/reproducing.md` puts the
 | `collect_pareto.py` | macro-F1 against the propella-1-4b labels + docs/s on the 300-doc comparison set |
 | `pareto_vs_llms.py` | the same against an LLM reference annotator, one JSON per reference |
 | `pareto.py` | the Pareto figures (one per reference, plus the combined two-panel figure) |
+| `per_field.py` | per-property agreement figure (student, teacher and the no-signal floor) |
 | `pareto_two.py` | both Paretos in one figure |
 | `mf1_vs_glm.py` | macro-F1 against the 300 documents that have GLM labels |
 | `field_compare.py` | per-property comparison against the propella-1 baselines |
@@ -58,8 +59,8 @@ that were run once per release or per experiment; `docs/reproducing.md` puts the
 | script | what it does |
 |---|---|
 | `example_output.py` | record one worked example per run, quoted in its model card |
-| `model_card.py` | fill `docs/model_sheet.md` for one run |
-| `publish.py` | upload a checkpoint, its thresholds and results to the Hub |
+| `model_card.py` | fill `docs/model_sheet.md` for one run -> `models/<repo>/README.md` |
+| `refresh_release.py` | regenerate all three cards and the README table from the scores |
 | `make_dataset_release.py`, `verify_dataset_release.py` | build and check the published dataset |
 | `render_banner.js` | render the banner SVG |
 

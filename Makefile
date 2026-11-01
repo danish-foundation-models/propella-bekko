@@ -1,4 +1,4 @@
-.PHONY: install lint format lint-check type test check data models figures cards annotate dataset help
+.PHONY: install lint format lint-check type test check data models figures per-field cards assets publish annotate dataset help
 
 install:  ## install the project + dev dependencies
 	uv sync
@@ -45,15 +45,48 @@ figures:  ## scores against both reference annotators, then the Pareto figures
 	uv run python scripts/pareto_vs_llms.py
 	uv run python scripts/pareto.py
 
-cards:  ## regenerate the three model cards from docs/model_sheet.md
+per-field:  ## per-property agreement with the reference annotators (one figure per student)
+	uv run python scripts/per_field.py --run a25m-xl-3ep --name propella-bekko-a25m \
+		--out docs/assets/per_property_a25m.svg
+	uv run python scripts/per_field.py --run a8m-xl --name propella-bekko-a8m \
+		--out docs/assets/per_property_a8m.svg
+	uv run python scripts/per_field.py --run static-long-ctx8192 --name propella-bekko-static \
+		--out docs/assets/per_property_static.svg
+
+cards:  ## regenerate the three model cards from docs/model_sheet.md, into models/
 	uv run python scripts/example_output.py a25m-xl-3ep a8m-xl static-long-ctx8192
-	uv run python scripts/model_card.py runs/a25m-xl-3ep propella-bekko-a25m --tier large \
-		--docs-per-s 186 --mf1-deepseek 0.523 --mf1-glm 0.522 --n-train "844,912 documents"
-	uv run python scripts/model_card.py runs/a8m-xl propella-bekko-a8m --tier small \
-		--docs-per-s 348 --mf1-deepseek 0.489 --mf1-glm 0.479 --n-train "844,912 documents" \
-		--train-minutes 92
-	uv run python scripts/model_card.py runs/static-long-ctx8192 propella-bekko-static --tier static \
-		--docs-per-s 686 --mf1-deepseek 0.479 --mf1-glm 0.468 --n-train "844,912 documents"
+	uv run python scripts/refresh_release.py --hardware "one RTX A6000"
+
+assets:  ## copy the shared figures into the model directories (they mirror the Hub repos)
+	cp docs/assets/banner.svg docs/assets/pareto_combined.svg docs/property_descriptions.md \
+		models/propella-bekko-a25m/
+	cp docs/assets/banner.svg docs/assets/pareto_combined.svg docs/property_descriptions.md \
+		models/propella-bekko-a8m/
+	cp docs/assets/banner.svg docs/assets/pareto_combined.svg docs/property_descriptions.md \
+		models/propella-bekko-static/
+	cp docs/assets/per_property_a25m.svg models/propella-bekko-a25m/per_property.svg
+	cp docs/assets/per_property_a8m.svg models/propella-bekko-a8m/per_property.svg
+	cp docs/assets/per_property_static.svg models/propella-bekko-static/per_property.svg
+	mkdir -p models/propella-bekko-a25m/docs models/propella-bekko-a8m/docs \
+		models/propella-bekko-static/docs
+	cp docs/assets/icon.png models/propella-bekko-a25m/docs/icon.png
+	cp docs/assets/icon.png models/propella-bekko-a8m/docs/icon.png
+	cp docs/assets/icon.png models/propella-bekko-static/docs/icon.png
+	cp runs/a25m-xl-3ep/thresholds.json runs/a25m-xl-3ep/results.json \
+		models/propella-bekko-a25m/
+	cp runs/a8m-xl/thresholds.json models/propella-bekko-a8m/
+	cp runs/a8m-xl/results.json models/propella-bekko-a8m/ 2>/dev/null || true
+	cp runs/static-long-ctx8192/thresholds.json models/propella-bekko-static/ \
+		2>/dev/null || true
+	cp runs/static-long-ctx8192/results.json models/propella-bekko-static/
+
+publish:  ## push each model directory and its checkpoint to the Hub (needs `hf auth login`)
+	hf upload danish-foundation-models/propella-bekko-a25m models/propella-bekko-a25m .
+	hf upload danish-foundation-models/propella-bekko-a25m runs/a25m-xl-3ep/model .
+	hf upload danish-foundation-models/propella-bekko-a8m models/propella-bekko-a8m .
+	hf upload danish-foundation-models/propella-bekko-a8m runs/a8m-xl/model .
+	hf upload danish-foundation-models/propella-bekko-static models/propella-bekko-static .
+	hf upload danish-foundation-models/propella-bekko-static runs/static-long-ctx8192/model .
 
 dataset:  ## rebuild and check the published dataset
 	uv run python scripts/make_dataset_release.py --out ../propella-bekko-data

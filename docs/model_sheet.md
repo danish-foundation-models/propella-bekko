@@ -40,7 +40,7 @@ readable it is, how dense, educational or safe, what kind of document it is, whi
 and region it belongs to — as JSON, without a task-specific prompt.
 
 **{title}** distils the largest of them, propella-1-4b, into a model small enough to run over
-whole corpora: the same label space, predicted in one forward pass, without generating text. It has
+whole corpora: the same 17 properties, predicted in one forward pass, without generating text. It has
 {params} parameters and annotates {docs_per_s} documents per second on {hardware}.
 
 <p align="center">
@@ -53,9 +53,9 @@ propella's own prompt and schema.
 
 ## What it predicts
 
-One head per property, 17 of them predicted. Values are the label names used by propella-1; the
-levels and their definitions are in the
-[property reference](https://huggingface.co/ellamind/propella-1-4b/blob/main/property_descriptions.md).
+**{title}** predicts 17 of propella-1's 18 properties — everything except the free-text
+`one_sentence_description` — with one head per property. The label names are propella-1's own, so an
+annotation from this model and one from propella-1 can be read side by side without a mapping.
 
 | category | property | type | what it means |
 |---|---|---|---|
@@ -75,7 +75,15 @@ levels and their definitions are in the
 | Safety and compliance | `content_safety` | ordinal, 5 | presence of inappropriate or harmful content |
 | | `pii_presence` | binary | contains personally identifiable information |
 | Geography | `regional_relevance` | multi-label, 14 | primary regional and cultural context |
-| | `country_relevance` | multi-label, 749 | specific country relevance |
+| | `country_relevance` | multi-label, 65 | specific country relevance — the 64 countries seen most often in training, plus `other` |
+
+One property is narrower than propella-1's: `country_relevance` keeps the 64 countries that occur
+most often in the training labels plus `other`, instead of propella-1's 749 values, because the long
+tail is too sparse to learn from the labels we have — a country outside the 64 reads as `other`.
+
+What each level means — and the rubric the annotators were given — is in the
+[property reference](property_descriptions.md): propella-1's own definitions, reproduced here so
+they stay online with the model.
 
 ## Architecture
 
@@ -106,15 +114,26 @@ predicting the most frequent label — is 0.123.
 | model | params | docs/s | vs DeepSeek | vs GLM-5.3 |
 |---|---|---|---|---|
 {student_rows}
-| propella-1-0.6b | 600M | 0.14 | 0.498 | 0.501 |
-| propella-1-1.7b | 1.7B | 0.14 | 0.547 | 0.534 |
-| propella-1-4b | 4B | 0.06 | 0.571 | 0.549 |
-| GLM-5.3-Flash | — | 0.41 | 0.659 | — |
-| DeepSeek-V4.1-Flash | — | 0.34 | — | 0.659 |
+{baseline_rows}
+
+Where that single number comes from, property by property — this model's agreement with
+DeepSeek-V4.1-Flash on the same 300 documents, next to propella-1-4b's own on the same documents:
+
+<p align="center">
+  <img src="per_property.svg" width="640" alt="per-property macro-F1 of this model against DeepSeek-V4.1-Flash, with propella-1-4b on the same documents" />
+</p>
+
+{per_property_note}
+
+`content_safety` sits at the no-signal floor for both models here: on these documents it is almost
+always "safe", so the property says little in this comparison.
 
 ## Usage
 
-To use the model simply run:
+**{title}** is not a `transformers` architecture: the checkpoint is a backbone plus one linear
+head per property, with the label space spelled out in `config.json`. Loading it is therefore the
+handful of lines below, using nothing beyond `transformers`, `torch`, `safetensors` and
+`huggingface_hub` — no package to install and no remote code to trust.
 
 ```python
 import json
@@ -197,6 +216,10 @@ answers:
 ```
 
 Multi-select properties are decoded at a sigmoid threshold of 0.5.{thresholds_note}
+
+For a whole corpus, the batched equivalent is `propella_bekko.Annotator` in the
+[training package](https://github.com/danish-foundation-models/propella-bekko) — the same forward
+pass over length-bucketed batches, several times the throughput of one document at a time.
 
 ## Citation
 

@@ -2,6 +2,13 @@
 
 *29 October 2026*
 
+> **Note, 1 November.** The throughput numbers below were measured on a Quadro RTX 8000 in fp16,
+> with the propella-1 baselines running under schema-constrained decoding, which dominated their
+> runtime. The axis has since been re-measured in bf16 on an RTX A6000 with free-form JSON — 2.73 /
+> 2.11 / 1.00 docs/s for propella-1-0.6b / 1.7b / 4b — and the student numbers moved a little with
+> it. [The README](https://github.com/danish-foundation-models/propella-bekko#results) has the
+> current table.
+
 Every Dynaword corpus needs the same thing before it can be used for training: a description of
 each document — how complete it is, how dense, whether it is educational, what sector it belongs
 to, whether it contains personal data. [propella-1-4b](https://huggingface.co/ellamind/propella-1-4b)
