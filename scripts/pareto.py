@@ -54,7 +54,7 @@ LABEL_OFFSET = {
     "propella-1-0.6b": (14, -10, "left"),
 }
 X_TICKS = [0.1, 1, 10, 100, 1000]
-HARDWARE = "one Quadro RTX 8000"
+HARDWARE = "one RTX A6000"
 
 
 def pareto_set(points: list[dict]) -> list[dict]:
