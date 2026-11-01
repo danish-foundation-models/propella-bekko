@@ -41,6 +41,7 @@ that were run once per release or per experiment; `docs/reproducing.md` puts the
 | `breakdown.py` | per-field and per-slice breakdown of one prediction file |
 | `agreement_matrix.py`, `agreement_short200.py` | every annotation set against every other |
 | `error_analysis.py`, `inspect_errors.py`, `inherited_errors.py` | where the students disagree, and whether the teacher disagrees too |
+| `dtype_sensitivity.py` | fp16 vs fp32 predictions on the same documents: how much the dtype moves the scores |
 
 ## Training experiments
 

@@ -41,3 +41,10 @@ schema-constrained runs were measuring the decoder, not the model, and are not u
 Free-form output occasionally names a label outside the taxonomy (a country the training data never
 had, a capitalised duplicate). Those are dropped — or counted as `other` where the property has such
 a bucket — rather than crashing the scorer.
+
+The agreement numbers are scored from each model's predictions on the held-out documents; for the
+students those were generated in fp16, because Turing has no bf16. That dtype is not what the numbers
+turn on: `scripts/dtype_sensitivity.py` re-runs `a25m` in fp16 and fp32 over the same 300 documents
+and scores both against the same reference — macro-F1 0.5184 (fp16) vs 0.5188 (fp32), with 296 of
+300 documents annotated identically. bf16 sits between the two, so a bf16 prediction run would move
+the tables by less than the third decimal.
