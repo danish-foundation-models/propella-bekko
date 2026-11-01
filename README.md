@@ -26,6 +26,9 @@ Motivation: [swedish-dynaword#79](https://huggingface.co/datasets/danish-foundat
 | `propella-bekko-a8m` | bekko-embedding-v1-a8m | 248 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a8m) |
 | `propella-bekko-a25m` | bekko-embedding-v1-a25m | 188 docs/s | [Hub](https://huggingface.co/danish-foundation-models/propella-bekko-a25m) |
 
+What the models do *not* cover — the 65 `country_relevance` values and the 17 languages, with the
+numbers behind both — is in [`docs/coverage.md`](docs/coverage.md).
+
 The published repos are submodules of this one — [`models/`](models) holds the three model repos,
 [`dataset/`](dataset) the data release — so a card is edited in place, reviewed in this repository's
 diff and published by pushing the submodule (`make checkout` on a fresh clone).
