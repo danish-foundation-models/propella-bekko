@@ -106,8 +106,7 @@ Most of the distance to the teacher sits in `content_length` (−0.26), `country
 Each model repo carries its own copy of that figure.
 
 Against the stored propella-1-4b labels on the full 1,000 held-out documents, the same models score
-0.820 (`a25m`), 0.779 (`a8m`) and 0.747 (`static`) on the paper's overall score; propella-1-4b
-re-run scores 0.875 on its own labels.
+0.820 (`a25m`), 0.779 (`a8m`) and 0.747 (`static`) on the paper's overall score.
 
 What moved those numbers — and what did not — is measured in [`experiments/`](experiments/):
 expected-value decoding for the ordinal properties (+0.013 QWK), a third epoch (+0.001), and no gain
