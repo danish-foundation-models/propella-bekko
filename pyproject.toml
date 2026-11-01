@@ -54,9 +54,9 @@ propella-bekko = "propella_bekko.cli:main"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# the model cards are rendered documents: the snippets in them are copy-paste examples,
-# not code that should be reformatted
-extend-exclude = ["models"]
+# models/ and dataset/ are the published repos, checked out as submodules: their cards and
+# datasheets are hand-written documents, not code that should be reformatted
+extend-exclude = ["models", "dataset"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
